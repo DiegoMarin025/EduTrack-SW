@@ -72,7 +72,7 @@ class _MainLayoutMaestrosState extends State<MainLayoutMaestros> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_selectedIndex]),
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: Color(0xFF1E3A8A),
         foregroundColor: Colors.white,
         elevation: 4.0,
         actions: [
@@ -181,7 +181,7 @@ class _MainLayoutMaestrosState extends State<MainLayoutMaestros> {
       padding: const EdgeInsets.only(top: 50, bottom: 20, left: 20, right: 20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.deepPurple.shade700, Colors.deepPurple.shade400],
+          colors: [Color(0xFF1E3A8A), Color(0xFF1E3A8A)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -197,7 +197,7 @@ class _MainLayoutMaestrosState extends State<MainLayoutMaestros> {
               _nombreDisplay.isNotEmpty ? _nombreDisplay[0].toUpperCase() : 'P',
               style: TextStyle(
                 fontSize: 30,
-                color: Colors.deepPurple.shade700,
+                color: Color(0xFF1E3A8A),
                 fontWeight: FontWeight.bold,
               ),
             ),

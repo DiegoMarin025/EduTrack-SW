@@ -12,12 +12,48 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _LoginPageState extends State<LoginPage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _isHovering = false;
+
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
 
   void login() async {
     if (emailController.text.isEmpty || passwordController.text.isEmpty) {
@@ -30,14 +66,11 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Llamamos al login (el servidor decide qué rol es)
       final usuario = await ApiService.loginUser(
         emailController.text.trim(),
         passwordController.text.trim(),
       );
 
-      // 2. Obtenemos el rol real desde la respuesta del servidor
-      // Aseguramos que venga en minúsculas para comparar fácil
       final String rolReal = (usuario['rol'] ?? 'alumno')
           .toString()
           .toLowerCase();
@@ -45,23 +78,13 @@ class _LoginPageState extends State<LoginPage> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('saved_username', emailController.text.trim());
       await prefs.setString('saved_password', passwordController.text.trim());
-
-      // Guardamos el rol detectado
       await prefs.setString('saved_userType', rolReal);
 
-      // Guardamos ID y nombre
       int userId = usuario['id'];
       await prefs.setInt('saved_id', userId);
       await prefs.setString('saved_name', usuario['nombre']);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Bienvenido ${usuario['nombre']}"),
-            backgroundColor: Colors.green,
-          ),
-        );
-        // Navegamos pasando el rol detectado
         _navegarAlHome(usuario, rolReal);
       }
     } catch (e) {
@@ -83,14 +106,12 @@ class _LoginPageState extends State<LoginPage> {
     final displayName = rawName.toString().split(' ')[0];
     final int userId = usuario['id'];
 
-    // Lógica de redirección automática
     if (rol == "profesor" || rol == "maestro") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const MainLayoutMaestros()),
       );
     } else {
-      // Por defecto va a Alumno
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -103,133 +124,214 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isWeb = MediaQuery.of(context).size.width > 800;
+
     return Scaffold(
-      backgroundColor: Colors.grey[200],
-      body: Center(
-        child: SingleChildScrollView(
+      backgroundColor: const Color(0xFFF1F5F9),
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child: SlideTransition(
+          position: _slideAnimation,
+          child: isWeb ? _buildWebLayout() : _buildMobileLayout(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileLayout() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: _buildLoginCard(),
+      ),
+    );
+  }
+
+  Widget _buildWebLayout() {
+    return Row(
+      children: [
+        /// 🔵 LADO IZQUIERDO
+        Expanded(
+          flex: 5,
           child: Container(
-            width: 350,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(25),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
-            child: Column(
-              children: [
-                // LOGOTIPO (o Ícono por defecto)
-                Image.asset(
-                  'lib/image/logotipo.png',
-                  height: 250,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Icon(
-                      Icons.school_rounded,
-                      size: 90,
-                      color: Colors.deepPurple,
-                    );
-                  },
-                ),
-                const Text(
-                  "Inicio de Sesión",
-                  style: TextStyle(fontSize: 18, color: Colors.grey),
-                ),
-                const SizedBox(height: 20),
-
-                // CAMPO CORREO
-                TextField(
-                  controller: emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    labelText: "Correo",
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 80),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Bienvenido a EduTrack",
+                    style: TextStyle(
+                      fontSize: 40,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                   ),
-                ),
-                const SizedBox(height: 15),
+                  const SizedBox(height: 20),
+                  const Text(
+                    "Gestión académica inteligente\npara maestros y padres",
+                    style: TextStyle(fontSize: 20, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 50),
 
-                // CAMPO CONTRASEÑA
-                TextField(
-                  controller: passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: "Contraseña",
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
-                        color: Colors.grey,
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
-                      },
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
+                  Center(
+                    child: Image.asset(
+                      'lib/image/login.png',
+                      width: ,
+                      fit: BoxFit.contain,
                     ),
                   ),
-                ),
-
-                // YA NO HAY DROPDOWN DE ROL AQUÍ 🎉
-                const SizedBox(height: 20),
-
-                // BOTÓN INGRESAR
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : login,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Text(
-                            "Ingresar",
-                            style: TextStyle(fontSize: 18),
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // IR A REGISTRO
-                TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const RegisterPage(),
-                      ),
-                    );
-                  },
-                  child: const Text("¿No tienes cuenta? Regístrate"),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
+        ),
+
+        /// LADO DERECHO
+        Expanded(
+          flex: 4,
+          child: Center(child: SizedBox(width: 420, child: _buildLoginCard())),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoginCard() {
+    return Container(
+      padding: const EdgeInsets.all(35),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 30,
+            offset: const Offset(0, 15),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image.asset('lib/image/logotipo.png', height: 150),
+          const SizedBox(height: 25),
+          const Text(
+            "Iniciar Sesión",
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E3A8A),
+            ),
+          ),
+          const SizedBox(height: 30),
+          _modernTextField(
+            controller: emailController,
+            hint: "Correo electrónico",
+            icon: Icons.email_outlined,
+          ),
+          const SizedBox(height: 20),
+          _modernTextField(
+            controller: passwordController,
+            hint: "Contraseña",
+            icon: Icons.lock_outline,
+            isPassword: true,
+          ),
+          const SizedBox(height: 30),
+          _modernButton(),
+          const SizedBox(height: 15),
+          TextButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const RegisterPage()),
+              );
+            },
+            child: const Text(
+              "¿No tienes cuenta? Regístrate",
+              style: TextStyle(color: Color(0xFF1E3A8A)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _modernTextField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    bool isPassword = false,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: isPassword ? _obscurePassword : false,
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixIcon: Icon(icon),
+        suffixIcon: isPassword
+            ? IconButton(
+                icon: Icon(
+                  _obscurePassword
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
+              )
+            : null,
+        filled: true,
+        fillColor: const Color(0xFFF1F5F9),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+
+  Widget _modernButton() {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovering = true),
+      onExit: (_) => setState(() => _isHovering = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: double.infinity,
+        height: 55,
+        child: ElevatedButton(
+          onPressed: _isLoading ? null : login,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _isHovering
+                ? const Color(0xFF1E40AF)
+                : const Color(0xFF2563EB),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            elevation: 8,
+          ),
+          child: _isLoading
+              ? const SizedBox(
+                  height: 22,
+                  width: 22,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : const Text(
+                  "Ingresar",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
+                ),
         ),
       ),
     );

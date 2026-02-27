@@ -23,7 +23,6 @@ class _RegisterPageState extends State<RegisterPage> {
   String userType = "Alumno";
   bool _isLoading = false;
 
-  // VARIABLES PARA VISIBILIDAD DE CONTRASEÑA 👁️
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
@@ -163,7 +162,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 const Icon(
                   Icons.person_add,
                   size: 90,
-                  color: Colors.deepPurple,
+                  color: Color(0xFF1E3A8A),
                 ),
                 const SizedBox(height: 15),
                 const Text(
@@ -246,7 +245,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 ),
                 const SizedBox(height: 15),
 
-                // --- CONFIRMAR CONTRASEÑA (CON OJITO) ---
+                // --- CONFIRMAR CONTRASEÑA ---
                 TextField(
                   controller: confirmPasswordController,
                   obscureText: _obscureConfirmPassword, // Variable de estado
@@ -280,7 +279,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : register,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
+                      backgroundColor: Color(0xFF1E3A8A),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 15),
                       shape: RoundedRectangleBorder(

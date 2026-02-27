@@ -10,17 +10,18 @@ class PanelDocenteScreen extends StatefulWidget {
 }
 
 class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
-  // Variables de estado
   int _profesorId = 0;
   String _nombreProfesor = "Profesor";
-
-  // Datos Dinámicos
   String _claseEnCurso = "Cargando...";
   String _subClaseEnCurso = "";
   int _totalGrupos = 0;
   int _totalAlumnos = 0;
   bool _isLoading = true;
   String? _errorMsg;
+
+  final Color primaryBlue = const Color(0xFF2D63ED);
+  final Color darkBlue = const Color(0xFF1E3A8A);
+  final Color bgLight = const Color(0xFFF8FAFC);
 
   @override
   void initState() {
@@ -35,7 +36,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
 
     setState(() {
       _profesorId = id;
-      _nombreProfesor = nombre.split(' ')[0]; // Usamos solo el primer nombre
+      _nombreProfesor = nombre.split(' ')[0];
     });
 
     if (id != 0) {
@@ -43,7 +44,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
     } else {
       setState(() {
         _isLoading = false;
-        _errorMsg = "Error: No se encontró ID de usuario logueado (ID=0).";
+        _errorMsg = "No se encontró ID de usuario.";
       });
     }
   }
@@ -53,30 +54,20 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
       _isLoading = true;
       _errorMsg = null;
     });
-
     try {
-      // 1. Intentamos cargar STATS (Protegido con try-catch interno)
-      // Si esto falla (ej. tabla no existe), no bloqueamos toda la pantalla.
       try {
         final stats = await ApiService.getProfesorStats(profesorId);
         _totalGrupos = stats['grupos'] ?? 0;
         _totalAlumnos = stats['alumnos'] ?? 0;
       } catch (e) {
-        print(
-          "⚠️ Advertencia: No se pudieron cargar stats (se usarán ceros): $e",
-        );
-        // Valores por defecto para no romper la UI
         _totalGrupos = 0;
         _totalAlumnos = 0;
       }
 
-      // 2. Cargamos GRUPOS (Esto es más importante)
       final gruposAsignados = await ApiService.getGrupos();
-
       if (mounted) {
         setState(() {
           _isLoading = false;
-
           if (gruposAsignados.isNotEmpty) {
             final primeraClase = gruposAsignados.first;
             _claseEnCurso = primeraClase.materia;
@@ -88,13 +79,10 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
         });
       }
     } catch (e) {
-      print("Error crítico en PanelDocente: $e");
       if (mounted) {
         setState(() {
           _isLoading = false;
-          // Si fallan los grupos, ahí sí mostramos error porque es esencial
-          _errorMsg =
-              "No se pudieron cargar los datos del panel.\nError: $e\n\nRevisa la consola de Node.js para más detalles.";
+          _errorMsg = "Error al conectar con el servidor.";
         });
       }
     }
@@ -102,106 +90,134 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Colors.grey[200],
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
+    return Scaffold(
+      backgroundColor: bgLight,
+      body: SafeArea(
+        child: _isLoading
+            ? Center(child: CircularProgressIndicator(color: primaryBlue))
+            : _errorMsg != null
+            ? _buildErrorView()
+            : SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24.0,
+                  vertical: 20,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 25),
+                    _buildQuickStats(),
+                    const SizedBox(height: 25),
+                    const Text(
+                      "Actividad de hoy",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    _infoCard(
+                      title: "Vacio",
+                      content: _claseEnCurso,
+                      subContent: _subClaseEnCurso,
+                      icon: Icons.school_rounded,
+                      color: primaryBlue,
+                    ),
+                    const SizedBox(height: 15),
+                    _infoCard(
+                      title: "Vacio",
+                      content: "Vacio",
+                      subContent: "Sin información adicional",
+                      icon: Icons.assignment_late_rounded,
+                      color: Colors.orangeAccent,
+                    ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "¡Bienvenido, $_nombreProfesor!",
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Colors.deepPurple,
+              "¡Hola, $_nombreProfesor! ",
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                color: darkBlue,
               ),
             ),
-            const SizedBox(height: 5),
-            Text(
-              "Panel de Control Docente",
-              style: TextStyle(color: Colors.grey[600], fontSize: 16),
+            const Text(
+              "Bienvenido a tu panel de control",
+              style: TextStyle(color: Colors.blueGrey, fontSize: 15),
             ),
-            const SizedBox(height: 20),
-
-            if (_isLoading)
-              const Center(
-                child: Column(
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 10),
-                    Text("Conectando con servidor..."),
-                  ],
-                ),
-              )
-            else if (_errorMsg != null)
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.red[50],
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.red),
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(
-                        Icons.error_outline,
-                        color: Colors.red,
-                        size: 40,
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        _errorMsg!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                      const SizedBox(height: 10),
-                      ElevatedButton(
-                        onPressed: () => _cargarEstadisticas(_profesorId),
-                        child: const Text("Reintentar"),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              Column(
-                children: [
-                  // Tarjeta de Clase Actual
-                  _infoCard(
-                    title: "Clase en curso (Ejemplo)",
-                    content: _claseEnCurso,
-                    subContent: _subClaseEnCurso,
-                    icon: Icons.access_time_filled_rounded,
-                    color: Colors.purple,
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  // Tarjeta de Pendientes
-                  _infoCard(
-                    title: "Pendientes",
-                    content: "Subir calificaciones",
-                    subContent: "Próximo cierre: 15 Oct",
-                    icon: Icons.warning_amber_rounded,
-                    color: Colors.orange,
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  // Estadísticas rápidas
-                  Row(
-                    children: [
-                      Expanded(child: _statCard("$_totalGrupos", "Grupos")),
-                      const SizedBox(width: 15),
-                      Expanded(child: _statCard("$_totalAlumnos", "Alumnos")),
-                    ],
-                  ),
-                ],
-              ),
           ],
         ),
+      ],
+    );
+  }
+
+  Widget _buildQuickStats() {
+    return Row(
+      children: [
+        Expanded(
+          child: _statCard("$_totalGrupos", "Grupos", Icons.groups_rounded),
+        ),
+        const SizedBox(width: 15),
+        Expanded(
+          child: _statCard(
+            "$_totalAlumnos",
+            "Alumnos",
+            Icons.person_search_rounded,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _statCard(String number, String label, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: primaryBlue.withOpacity(0.6), size: 28),
+          const SizedBox(height: 12),
+          Text(
+            number,
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.grey,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -213,22 +229,32 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
     required IconData icon,
     required Color color,
   }) {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.1)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(15),
               ),
-              child: Icon(icon, color: color, size: 30),
+              child: Icon(icon, color: color, size: 28),
             ),
-            const SizedBox(width: 15),
+            const SizedBox(width: 18),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -236,24 +262,35 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
                   Text(
                     title,
                     style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
+                      color: color,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.1,
                     ),
                   ),
+                  const SizedBox(height: 4),
                   Text(
                     content,
                     style: const TextStyle(
-                      fontSize: 16,
+                      fontSize: 17,
                       fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B),
                     ),
                   ),
                   Text(
                     subContent,
-                    style: TextStyle(color: Colors.grey[800], fontSize: 13),
+                    style: const TextStyle(
+                      color: Colors.blueGrey,
+                      fontSize: 14,
+                    ),
                   ),
                 ],
               ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 16,
+              color: Colors.grey[300],
             ),
           ],
         ),
@@ -261,23 +298,32 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
     );
   }
 
-  Widget _statCard(String number, String label) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+  Widget _buildErrorView() {
+    return Center(
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(30.0),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
+            Icon(Icons.cloud_off_rounded, size: 80, color: Colors.red[200]),
+            const SizedBox(height: 20),
             Text(
-              number,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.purple,
+              _errorMsg!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.blueGrey),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryBlue,
+                shape: StadiumBorder(),
+              ),
+              onPressed: () => _cargarEstadisticas(_profesorId),
+              child: const Text(
+                "Reintentar conexión",
+                style: TextStyle(color: Colors.white),
               ),
             ),
-            Text(label, style: const TextStyle(color: Colors.grey)),
           ],
         ),
       ),

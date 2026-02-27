@@ -88,7 +88,7 @@ class _MainLayoutState extends State<MainLayout> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_selectedIndex]),
-        backgroundColor: const Color(0xFF673AB7),
+        backgroundColor: Color(0xFF1E3A8A),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -193,7 +193,7 @@ class _MainLayoutState extends State<MainLayout> {
       padding: const EdgeInsets.only(top: 50, bottom: 20, left: 20, right: 20),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF673AB7), Color(0xFF9575CD)],
+          colors: [Color(0xFF1E3A8A), Color(0xFF9575CD)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -209,7 +209,7 @@ class _MainLayoutState extends State<MainLayout> {
               _nombreDisplay.isNotEmpty ? _nombreDisplay[0].toUpperCase() : 'A',
               style: const TextStyle(
                 fontSize: 30,
-                color: Color(0xFF673AB7),
+                color: Color(0xFF1E3A8A),
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -266,8 +266,8 @@ class _MainLayoutState extends State<MainLayout> {
         gradient: isSelected
             ? LinearGradient(
                 colors: [
-                  const Color(0xFF673AB7).withOpacity(0.2),
-                  const Color(0xFF673AB7).withOpacity(0.05),
+                  Color(0xFF1E3A8A).withOpacity(0.2),
+                  Color(0xFF1E3A8A).withOpacity(0.05),
                 ],
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
@@ -278,12 +278,12 @@ class _MainLayoutState extends State<MainLayout> {
       child: ListTile(
         leading: Icon(
           icon,
-          color: isSelected ? const Color(0xFF673AB7) : Colors.grey.shade700,
+          color: isSelected ? Color(0xFF1E3A8A) : Colors.grey.shade700,
         ),
         title: Text(
           text,
           style: TextStyle(
-            color: isSelected ? const Color(0xFF673AB7) : Colors.black87,
+            color: isSelected ? Color(0xFF1E3A8A) : Colors.black87,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
