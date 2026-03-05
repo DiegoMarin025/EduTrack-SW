@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
+import 'detalle_grupo_screen.dart';
+import 'dialog_crear_clase.dart';
+import 'materia_home_screen.dart';
 
+// ===============================
+// MIS GRUPOS (REDISEÑO PRIMARIA)
+// ===============================
 class MisGruposScreen extends StatefulWidget {
   const MisGruposScreen({super.key});
 
@@ -10,9 +16,19 @@ class MisGruposScreen extends StatefulWidget {
 }
 
 class _MisGruposScreenState extends State<MisGruposScreen> {
-  List<Grupo> _grupos = [];
+  List<Grupo> _clases = [];
   bool _loading = true;
   int _profesorId = 0;
+
+  // UI (alineado con tu login)
+  final Color primaryBlue = const Color(0xFF2D63ED);
+  final Color bgLight = const Color(0xFFF8FAFC);
+  final Color textDark = const Color(0xFF0F172A);
+  final Color textSoft = const Color(0xFF64748B);
+  final Color border = const Color(0xFFE2E8F0);
+
+  // Para expandir/cerrar un grupo
+  final Set<int> _expandedGroups = {};
 
   @override
   void initState() {
@@ -20,35 +36,31 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
     _cargarDatosUsuario();
   }
 
-  // 1. Obtener el ID del profesor desde la sesión guardada
   Future<void> _cargarDatosUsuario() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _profesorId = prefs.getInt('saved_id') ?? 0;
     });
 
-    // Solo cargamos si tenemos un ID válido
     if (_profesorId != 0) {
-      _cargarGrupos();
+      _cargarClases();
     } else {
       setState(() => _loading = false);
     }
   }
 
-  // 2. Cargar grupos filtrados por el Profesor ID
-  Future<void> _cargarGrupos() async {
+  Future<void> _cargarClases() async {
+    setState(() => _loading = true);
     try {
-      // Enviamos el ID para que el servidor nos devuelva SOLO mis materias
       final grupos = await ApiService.getGrupos(profesorId: _profesorId);
-
-      if (mounted) {
-        setState(() {
-          _grupos = grupos;
-          _loading = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _clases = grupos;
+        _loading = false;
+      });
     } catch (e) {
-      if (mounted) setState(() => _loading = false);
+      if (!mounted) return;
+      setState(() => _loading = false);
     }
   }
 
@@ -62,487 +74,593 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
 
     showDialog(
       context: context,
-      builder: (context) =>
-          DialogCrearClase(profesorId: _profesorId), // Pasamos el ID
-    ).then((_) => _cargarGrupos());
+      builder: (context) => DialogCrearClase(profesorId: _profesorId),
+    ).then((_) => _cargarClases());
+  }
+
+  // Agrupa materias por grupo físico (TI-52, 5°A, etc.)
+  List<_GrupoBundle> _buildBundles() {
+    final Map<int, _GrupoBundle> map = {};
+
+    for (final c in _clases) {
+      final key = c.grupoIdReal; // grupo físico
+      map.putIfAbsent(
+        key,
+        () => _GrupoBundle(grupoIdReal: key, nombreGrupo: c.nombre, items: []),
+      );
+      map[key]!.items.add(c);
+    }
+
+    final list = map.values.toList();
+
+    // Ordena por nombre para que se vea estable
+    list.sort(
+      (a, b) =>
+          a.nombreGrupo.toLowerCase().compareTo(b.nombreGrupo.toLowerCase()),
+    );
+    return list;
+  }
+
+  void _toggleExpand(int grupoIdReal) {
+    setState(() {
+      if (_expandedGroups.contains(grupoIdReal)) {
+        _expandedGroups.remove(grupoIdReal);
+      } else {
+        _expandedGroups.add(grupoIdReal);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final bundles = _buildBundles();
+
     return Scaffold(
+      backgroundColor: bgLight,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _abrirDialogoCrear,
-        label: const Text("Nueva Materia"),
-        icon: const Icon(Icons.add),
-        backgroundColor: Colors.deepPurple,
+        label: const Text("Nueva materia"),
+        icon: const Icon(Icons.add_rounded),
+        backgroundColor: primaryBlue,
         foregroundColor: Colors.white,
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _grupos.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.class_outlined, size: 60, color: Colors.grey),
-                  SizedBox(height: 10),
-                  Text(
-                    "No tienes materias asignadas",
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
+      body: SafeArea(
+        child: _loading
+            ? Center(child: CircularProgressIndicator(color: primaryBlue))
+            : Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                child: ListView(
+                  children: [
+                    // Encabezado “humano” para que no se sienta vacío
+                    Text(
+                      "Tu salón y tus materias",
+                      style: TextStyle(
+                        color: textDark,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      "Aquí gestionas tu grupo: alumnos, lista del día y calificaciones.",
+                      style: TextStyle(
+                        color: textSoft,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Si está vacío: onboarding (no se ve “pantalla IA”)
+                    if (bundles.isEmpty) ...[
+                      _OnboardingEmpty(
+                        primaryBlue: primaryBlue,
+                        border: border,
+                        textDark: textDark,
+                        textSoft: textSoft,
+                        onCreate: _abrirDialogoCrear,
+                      ),
+                      const SizedBox(height: 12),
+                      _TipCard(
+                        border: border,
+                        textSoft: textSoft,
+                        textDark: textDark,
+                      ),
+                    ] else ...[
+                      // “Hoy” (por ahora es visual; luego lo conectamos a asistencia)
+                      _TodayCard(
+                        primaryBlue: primaryBlue,
+                        border: border,
+                        textDark: textDark,
+                        textSoft: textSoft,
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Lista de “Mi salón”
+                      Text(
+                        "Mis grupos",
+                        style: TextStyle(
+                          color: textDark,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      for (final bundle in bundles) ...[
+                        _GroupCard(
+                          primaryBlue: primaryBlue,
+                          border: border,
+                          textDark: textDark,
+                          textSoft: textSoft,
+                          bundle: bundle,
+                          expanded: _expandedGroups.contains(
+                            bundle.grupoIdReal,
+                          ),
+                          onToggleExpand: () =>
+                              _toggleExpand(bundle.grupoIdReal),
+                          onOpenAlumnos: () {
+                            // Abrimos alumnos con el primer item (tiene ids correctos)
+                            final representative = bundle.items.first;
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    DetalleGrupoScreen(grupo: representative),
+                              ),
+                            );
+                          },
+                          onPasarLista: () {
+                            // Por ahora usamos alumnos como “lista”
+                            final representative = bundle.items.first;
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    DetalleGrupoScreen(grupo: representative),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ],
+                  ],
+                ),
               ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _grupos.length,
-              itemBuilder: (context, index) {
-                final grupo = _grupos[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  elevation: 3,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    leading: CircleAvatar(
-                      backgroundColor: Colors.deepPurple.shade100,
-                      child: Icon(
-                        Icons.class_,
-                        color: Colors.deepPurple.shade700,
-                      ),
-                    ),
-                    title: Text(
-                      grupo.nombre,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                    subtitle: Text(
-                      grupo.materia,
-                      style: const TextStyle(fontSize: 16, color: Colors.grey),
-                    ),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => DetalleGrupoScreen(grupo: grupo),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
+      ),
     );
   }
 }
 
-// ========================================================
-// PANTALLA DE DETALLE (VER ALUMNOS)
-// ========================================================
-class DetalleGrupoScreen extends StatefulWidget {
-  final Grupo grupo;
-  const DetalleGrupoScreen({super.key, required this.grupo});
+// ===============================
+// UI COMPONENTS
+// ===============================
+
+class _OnboardingEmpty extends StatelessWidget {
+  final Color primaryBlue;
+  final Color border;
+  final Color textDark;
+  final Color textSoft;
+  final VoidCallback onCreate;
+
+  const _OnboardingEmpty({
+    required this.primaryBlue,
+    required this.border,
+    required this.textDark,
+    required this.textSoft,
+    required this.onCreate,
+  });
 
   @override
-  State<DetalleGrupoScreen> createState() => _DetalleGrupoScreenState();
-}
-
-class _DetalleGrupoScreenState extends State<DetalleGrupoScreen> {
-  List<Alumno> _alumnos = [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _cargarAlumnos();
-  }
-
-  Future<void> _cargarAlumnos() async {
-    try {
-      final alumnos = await ApiService.getAlumnosPorGrupo(widget.grupo.id);
-      if (mounted)
-        setState(() {
-          _alumnos = alumnos;
-          _loading = false;
-        });
-    } catch (e) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  void _eliminarAlumno(Alumno alumno) async {
-    bool confirmar =
-        await showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text("¿Eliminar alumno?"),
-            content: Text(
-              "¿Seguro que quieres sacar a ${alumno.nombre} de este grupo?",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text("Cancelar"),
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: primaryBlue.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(Icons.school_rounded, color: primaryBlue),
               ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text(
-                  "Eliminar",
-                  style: TextStyle(color: Colors.red),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  "Aún no tienes grupos",
+                  style: TextStyle(
+                    color: textDark,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
             ],
           ),
-        ) ??
-        false;
-
-    if (confirmar) {
-      try {
-        await ApiService.eliminarAlumnoDeGrupo(
-          alumno.id,
-          widget.grupo.grupoIdReal,
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Alumno eliminado'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        _cargarAlumnos();
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error al eliminar'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  void _mostrarDialogoAgregar() {
-    showDialog(
-      context: context,
-      builder: (context) => DialogAgregarAlumno(
-        grupo: widget.grupo,
-        onAlumnoAgregado: _cargarAlumnos,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.grupo.nombre, style: const TextStyle(fontSize: 18)),
-            Text(widget.grupo.materia, style: const TextStyle(fontSize: 12)),
-          ],
-        ),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _alumnos.isEmpty
-          ? const Center(child: Text("No hay alumnos inscritos"))
-          : ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: _alumnos.length,
-              separatorBuilder: (ctx, i) => const Divider(),
-              itemBuilder: (context, index) {
-                final alumno = _alumnos[index];
-                return ListTile(
-                  leading: CircleAvatar(
-                    child: Text(
-                      alumno.nombre.isNotEmpty
-                          ? alumno.nombre[0].toUpperCase()
-                          : '?',
-                    ),
-                  ),
-                  title: Text(alumno.nombre),
-                  subtitle: Text(alumno.correo),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    onPressed: () => _eliminarAlumno(alumno),
-                  ),
-                );
-              },
+          const SizedBox(height: 10),
+          Text(
+            "Crea tu primer grupo y agrega una materia. Luego podrás registrar alumnos y pasar lista.",
+            style: TextStyle(
+              color: textSoft,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _mostrarDialogoAgregar,
-        label: const Text("Agregar Alumno"),
-        icon: const Icon(Icons.person_add),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
-      ),
-    );
-  }
-}
-
-// ========================================================
-// DIÁLOGO CREAR CLASE (CORREGIDO)
-// ========================================================
-class DialogCrearClase extends StatefulWidget {
-  final int profesorId;
-
-  const DialogCrearClase({super.key, required this.profesorId});
-
-  @override
-  State<DialogCrearClase> createState() => _DialogCrearClaseState();
-}
-
-class _DialogCrearClaseState extends State<DialogCrearClase> {
-  List<GrupoFisico> _gruposDisponibles = [];
-  int? _selectedGrupoId;
-  final TextEditingController _materiaController = TextEditingController();
-  bool _loadingAction = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _cargarCatalogo();
-  }
-
-  void _cargarCatalogo() async {
-    try {
-      final res = await ApiService.getGruposFisicos();
-      if (mounted) setState(() => _gruposDisponibles = res);
-    } catch (e) {}
-  }
-
-  void _crear() async {
-    if (_selectedGrupoId == null || _materiaController.text.isEmpty) return;
-    setState(() => _loadingAction = true);
-
-    try {
-      // ¡AQUI ESTABA EL ERROR! Ahora enviamos el profesorId correctamente
-      await ApiService.crearClase(
-        _selectedGrupoId!,
-        _materiaController.text.trim(),
-        profesorId: widget.profesorId, // <--- LÍNEA DESCOMENTADA Y CORREGIDA
-      );
-
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Clase creada y asignada a ti correctamente'),
-            backgroundColor: Colors.green,
           ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _loadingAction = false);
-        // Muestra el error completo para saber qué pasa
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text("Nueva Materia"),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          DropdownButtonFormField<int>(
-            value: _selectedGrupoId,
-            hint: const Text("Selecciona el Grupo"),
-            items: _gruposDisponibles
-                .map(
-                  (g) => DropdownMenuItem(value: g.id, child: Text(g.nombre)),
-                )
-                .toList(),
-            onChanged: (val) => setState(() => _selectedGrupoId = val),
-          ),
-          const SizedBox(height: 15),
-          TextField(
-            controller: _materiaController,
-            decoration: const InputDecoration(
-              labelText: "Nombre de la Materia",
-              hintText: "Ej. Matemáticas I",
-              border: OutlineInputBorder(),
+          const SizedBox(height: 14),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryBlue,
+              foregroundColor: Colors.white,
+              shape: const StadiumBorder(),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+            onPressed: onCreate,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text(
+              "Crear mi primer grupo/materia",
+              style: TextStyle(fontWeight: FontWeight.w800),
             ),
           ),
         ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text("Cancelar"),
-        ),
-        ElevatedButton(
-          onPressed: _loadingAction ? null : _crear,
-          child: _loadingAction
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text("Crear Clase"),
-        ),
-      ],
     );
   }
 }
 
-// Diálogo Agregar Alumno (Sin cambios, se mantiene igual)
-class DialogAgregarAlumno extends StatefulWidget {
-  final Grupo grupo;
-  final VoidCallback onAlumnoAgregado;
-  const DialogAgregarAlumno({
-    super.key,
-    required this.grupo,
-    required this.onAlumnoAgregado,
+class _TipCard extends StatelessWidget {
+  final Color border;
+  final Color textSoft;
+  final Color textDark;
+
+  const _TipCard({
+    required this.border,
+    required this.textSoft,
+    required this.textDark,
   });
-  @override
-  State<DialogAgregarAlumno> createState() => _DialogAgregarAlumnoState();
-}
-
-class _DialogAgregarAlumnoState extends State<DialogAgregarAlumno> {
-  final TextEditingController _searchController = TextEditingController();
-  List<Alumno> _resultados = [];
-  bool _buscando = false;
-
-  void _buscar() async {
-    if (_searchController.text.isEmpty) return;
-    setState(() => _buscando = true);
-    try {
-      final res = await ApiService.buscarAlumnos(_searchController.text);
-      setState(() => _resultados = res);
-    } catch (e) {
-    } finally {
-      setState(() => _buscando = false);
-    }
-  }
-
-  void _agregar(Alumno alumno) async {
-    try {
-      final estado = await ApiService.verificarGrupoAlumno(alumno.id);
-
-      if (estado['enrolled'] == true) {
-        if (!mounted) return;
-
-        if (estado['group_id'] == widget.grupo.grupoIdReal) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Este alumno ya está en este grupo')),
-          );
-          return;
-        }
-
-        bool confirmar =
-            await showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text("⚠️ Alumno ya inscrito"),
-                content: Text(
-                  "El alumno ${alumno.nombre} ya pertenece al grupo ${estado['group_name']}.\n\n¿Quieres moverlo a ${widget.grupo.nombre}?",
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx, false),
-                    child: const Text("Cancelar"),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: const Text(
-                      "Mover",
-                      style: TextStyle(color: Colors.orange),
-                    ),
-                  ),
-                ],
-              ),
-            ) ??
-            false;
-
-        if (!confirmar) return;
-      }
-
-      await ApiService.agregarAlumnoAGrupo(alumno.id, widget.grupo.grupoIdReal);
-
-      if (mounted) {
-        Navigator.pop(context);
-        widget.onAlumnoAgregado();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${alumno.nombre} agregado correctamente'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Colors.red,
-          ),
-        );
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text("Inscribir a ${widget.grupo.nombre}"),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: "Buscar por nombre o correo...",
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.search),
-                  onPressed: _buscar,
-                ),
-              ),
-              onSubmitted: (_) => _buscar(),
-            ),
-            const SizedBox(height: 10),
-            Flexible(
-              child: _buscando
-                  ? const Center(child: CircularProgressIndicator())
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: _resultados.length,
-                      itemBuilder: (context, index) {
-                        final alumno = _resultados[index];
-                        return ListTile(
-                          title: Text(alumno.nombre),
-                          subtitle: Text(alumno.correo),
-                          trailing: IconButton(
-                            icon: const Icon(
-                              Icons.add_circle,
-                              color: Colors.green,
-                            ),
-                            onPressed: () => _agregar(alumno),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(18),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text("Cerrar"),
-        ),
-      ],
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded, color: Color(0xFF64748B)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              "Tip: Si tu escuela usa un solo grupo (por ejemplo 5°B), crea ese grupo una vez y luego agrega tus materias.",
+              style: TextStyle(
+                color: textSoft,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
+
+class _TodayCard extends StatelessWidget {
+  final Color primaryBlue;
+  final Color border;
+  final Color textDark;
+  final Color textSoft;
+
+  const _TodayCard({
+    required this.primaryBlue,
+    required this.border,
+    required this.textDark,
+    required this.textSoft,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final label = "${now.day}/${now.month}/${now.year}";
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: primaryBlue.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(Icons.today_rounded, color: primaryBlue),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Hoy • $label",
+                  style: TextStyle(
+                    color: textDark,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Asistencia: pendiente • Calificaciones: opcional",
+                  style: TextStyle(
+                    color: textSoft,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12.8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              "Pendiente",
+              style: TextStyle(
+                color: textSoft,
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupCard extends StatelessWidget {
+  final Color primaryBlue;
+  final Color border;
+  final Color textDark;
+  final Color textSoft;
+  final _GrupoBundle bundle;
+  final bool expanded;
+  final VoidCallback onToggleExpand;
+  final VoidCallback onOpenAlumnos;
+  final VoidCallback onPasarLista;
+
+  const _GroupCard({
+    required this.primaryBlue,
+    required this.border,
+    required this.textDark,
+    required this.textSoft,
+    required this.bundle,
+    required this.expanded,
+    required this.onToggleExpand,
+    required this.onOpenAlumnos,
+    required this.onPasarLista,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final materias = bundle.items.map((e) => e.materia).toList();
+    final materiasText = materias.length == 1
+        ? "1 materia"
+        : "${materias.length} materias";
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: onToggleExpand,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: primaryBlue.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(Icons.groups_rounded, color: primaryBlue),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          bundle.nombreGrupo,
+                          style: TextStyle(
+                            color: textDark,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          materiasText,
+                          style: TextStyle(
+                            color: textSoft,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    color: Colors.grey[500],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Acciones rápidas (más “primaria”)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onPasarLista,
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: border),
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    icon: const Icon(Icons.checklist_rounded, size: 18),
+                    label: const Text(
+                      "Pasar lista",
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: onOpenAlumnos,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryBlue,
+                      foregroundColor: Colors.white,
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    icon: const Icon(Icons.people_alt_rounded, size: 18),
+                    label: const Text(
+                      "Alumnos",
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Materias (expandible)
+          if (expanded) ...[
+            Container(height: 1, color: border),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Materias",
+                    style: TextStyle(
+                      color: textDark,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: materias.map((m) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          m,
+                          style: TextStyle(
+                            color: textDark,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Botón secundario (cuando quieras conectar a calificaciones)
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.grade_rounded,
+                        size: 18,
+                        color: Color(0xFF64748B),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "",
+                          style: TextStyle(
+                            color: textSoft,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12.8,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// Agrupación local
+class _GrupoBundle {
+  final int grupoIdReal;
+  final String nombreGrupo;
+  final List<Grupo> items; // cada item es una materia (clase)
+
+  _GrupoBundle({
+    required this.grupoIdReal,
+    required this.nombreGrupo,
+    required this.items,
+  });
+}
+
+

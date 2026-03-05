@@ -185,7 +185,7 @@ class _LoginPageState extends State<LoginPage>
                   Center(
                     child: Image.asset(
                       'lib/image/login.png',
-                      width: ,
+                      width: 350,
                       fit: BoxFit.contain,
                     ),
                   ),
@@ -221,7 +221,7 @@ class _LoginPageState extends State<LoginPage>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Image.asset('lib/image/logotipo.png', height: 150),
+          Image.asset('lib/image/logotipo.png', height: 200),
           const SizedBox(height: 25),
           const Text(
             "Iniciar Sesión",
@@ -330,7 +330,11 @@ class _LoginPageState extends State<LoginPage>
                 )
               : const Text(
                   "Ingresar",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
                 ),
         ),
       ),

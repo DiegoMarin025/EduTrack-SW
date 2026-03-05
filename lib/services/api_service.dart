@@ -1,9 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'dart:io' show Platform; // Necesario para detectar si es Android/iOS
-import 'package:flutter/foundation.dart'
-    show kIsWeb; // Necesario para detectar Web
-import '/pantallas/materia_models.dart'; 
+import 'dart:io' show Platform; // Android/iOS
+import 'package:flutter/foundation.dart' show kIsWeb; // Web
+import '/pantallas/materia_models.dart';
 
 // SERVICIO API
 class ApiService {
@@ -12,13 +11,28 @@ class ApiService {
     if (kIsWeb) {
       return 'http://localhost:3000'; // Web
     } else if (Platform.isAndroid) {
-      return 'http://192.168.0.13:3000'; // Emulador Android
+      return 'http://192.168.0.13:3000'; // Android (tu IP)
     } else {
       return 'http://localhost:3000'; // iOS / Desktop
     }
   }
 
-  // 1. OBTENER GRUPOS (FILTRADO POR PROFESOR)
+  static Future<List<GrupoBundle>> getMisGruposAgrupados(int profesorId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/mis_grupos?profesor_id=$profesorId'),
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body);
+      return data
+          .map((e) => GrupoBundle.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } else {
+      throw Exception('Error al cargar mis grupos: ${response.body}');
+    }
+  }
+
+  // 1. OBTENER GRUPOS (FILTRADO POR PROFESOR) -> tu endpoint viejo /grupos
   static Future<List<Grupo>> getGrupos({int? profesorId}) async {
     String url = '$baseUrl/grupos';
     if (profesorId != null) {
@@ -38,10 +52,13 @@ class ApiService {
   }
 
   // 2. OBTENER ALUMNOS POR GRUPO
+  // OJO: en tu backend, este endpoint espera "clase_id" = materias_grupos.id (mg.id)
+  // y NO el id del grupo físico.
   static Future<List<Alumno>> getAlumnosPorGrupo(int grupoId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/grupos/$grupoId/alumnos'),
     );
+
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data
@@ -53,12 +70,14 @@ class ApiService {
   }
 
   // 3. OBTENER CALIFICACIÓN
+  // OJO: grupoId aquí en realidad es "mg.id" (materias_grupos.id)
   static Future<String?> getCalificacion(int alumnoId, int grupoId) async {
     final response = await http.get(
       Uri.parse(
         '$baseUrl/calificaciones?alumno_id=$alumnoId&grupo_id=$grupoId',
       ),
     );
+
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       if (data.isNotEmpty) {
@@ -71,6 +90,7 @@ class ApiService {
   }
 
   // 4. GUARDAR CALIFICACIÓN
+  // OJO: grupoId aquí en realidad es "mg.id"
   static Future<void> guardarCalificacion(
     int alumnoId,
     int grupoId,
@@ -85,13 +105,13 @@ class ApiService {
         'calificacion': calificacion,
       }),
     );
+
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('Error al guardar: ${response.body}');
     }
   }
 
   // 5. OBTENER NOTIFICACIONES
-
   static Future<List<Notificacion>> getNotificaciones(int usuarioId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/notificaciones/$usuarioId'),
@@ -108,7 +128,6 @@ class ApiService {
   }
 
   // 6. REGISTRAR USUARIO (RETORNA ID)
-
   static Future<int> registerUser(
     String nombre,
     String correo,
@@ -128,7 +147,6 @@ class ApiService {
 
     if (response.statusCode == 200) {
       final body = json.decode(response.body);
-      // Retornamos el ID del nuevo usuario
       return body['id'];
     } else {
       final body = json.decode(response.body);
@@ -136,22 +154,15 @@ class ApiService {
     }
   }
 
-  // ---------------------------------------------------------
   // 7. LOGIN
-  // ---------------------------------------------------------
   static Future<Map<String, dynamic>> loginUser(
     String correo,
     String contrasena,
-    // String tipoUsuario,  <--- ELIMINADO: Ya no se pide este parámetro
   ) async {
     final response = await http.post(
       Uri.parse('$baseUrl/login'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'correo': correo,
-        'contrasena': contrasena,
-        // 'tipo_usuario': tipoUsuario, <--- ELIMINADO: Ya no se envía al servidor
-      }),
+      body: json.encode({'correo': correo, 'contrasena': contrasena}),
     );
 
     if (response.statusCode == 200) {
@@ -163,13 +174,12 @@ class ApiService {
     }
   }
 
-  // ---------------------------------------------------------
   // 8. BUSCAR ALUMNOS
-  // ---------------------------------------------------------
   static Future<List<Alumno>> buscarAlumnos(String query) async {
     final response = await http.get(
       Uri.parse('$baseUrl/alumnos/buscar?q=$query'),
     );
+
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data
@@ -180,9 +190,42 @@ class ApiService {
     }
   }
 
-  // ---------------------------------------------------------
+  // 8.1 CREAR ALUMNO (NUEVO) -> reutiliza /register
+  static Future<Alumno> crearAlumno({
+    required String nombre,
+    required String correo,
+  }) async {
+    final nombreClean = nombre.trim();
+    final correoClean = correo.trim();
+
+    if (nombreClean.isEmpty) throw Exception('El nombre es obligatorio');
+    if (correoClean.isEmpty) throw Exception('El correo es obligatorio');
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/register'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'nombre': nombreClean,
+        'correo': correoClean,
+        'contrasena': 'Temp12345*',
+        'tipo_usuario': 'alumno',
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      final int id = body['id'] is int
+          ? body['id']
+          : int.parse(body['id'].toString());
+      return Alumno(id: id, nombre: nombreClean, correo: correoClean);
+    } else {
+      final body = json.decode(response.body);
+      throw Exception(body['error'] ?? 'Error al crear alumno');
+    }
+  }
+
   // 9. AGREGAR ALUMNO A GRUPO
-  // ---------------------------------------------------------
+  // IMPORTANTE: aquí "grupoId" es el grupo físico (grupos.id)
   static Future<void> agregarAlumnoAGrupo(int alumnoId, int grupoId) async {
     final response = await http.post(
       Uri.parse('$baseUrl/grupos/agregar_alumno'),
@@ -196,9 +239,7 @@ class ApiService {
     }
   }
 
-  // ---------------------------------------------------------
   // 10. OBTENER CATÁLOGO DE GRUPOS FÍSICOS
-  // ---------------------------------------------------------
   static Future<List<GrupoFisico>> getGruposFisicos() async {
     final response = await http.get(Uri.parse('$baseUrl/grupos_disponibles'));
     if (response.statusCode == 200) {
@@ -211,13 +252,11 @@ class ApiService {
     }
   }
 
-  // ---------------------------------------------------------
   // 11. CREAR CLASE (MATERIA) - VINCULA AL PROFESOR
-  // ---------------------------------------------------------
   static Future<void> crearClase(
     int grupoId,
     String nombreMateria, {
-    int? profesorId, // <--- Parámetro opcional para asignar al profesor
+    int? profesorId,
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/clases/crear'),
@@ -225,7 +264,7 @@ class ApiService {
       body: json.encode({
         'grupo_id': grupoId,
         'nombre_materia': nombreMateria,
-        'profesor_id': profesorId, // Enviamos el ID si existe
+        'profesor_id': profesorId,
       }),
     );
 
@@ -234,9 +273,7 @@ class ApiService {
     }
   }
 
-  // ---------------------------------------------------------
   // 12. ELIMINAR ALUMNO DEL GRUPO
-  // ---------------------------------------------------------
   static Future<void> eliminarAlumnoDeGrupo(int alumnoId, int grupoId) async {
     final response = await http.post(
       Uri.parse('$baseUrl/grupos/eliminar_alumno'),
@@ -249,9 +286,7 @@ class ApiService {
     }
   }
 
-  // ---------------------------------------------------------
   // 13. VERIFICAR GRUPO DEL ALUMNO
-  // ---------------------------------------------------------
   static Future<Map<String, dynamic>> verificarGrupoAlumno(int alumnoId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/alumnos/$alumnoId/grupo'),
@@ -264,9 +299,7 @@ class ApiService {
     }
   }
 
-  // ---------------------------------------------------------
   // 14. OBTENER STATS DEL PROFESOR
-  // ---------------------------------------------------------
   static Future<Map<String, dynamic>> getProfesorStats(int profesorId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/profesor/$profesorId/stats'),
@@ -279,9 +312,7 @@ class ApiService {
     }
   }
 
-  // ---------------------------------------------------------
   // 15. DASHBOARD DEL ALUMNO
-  // ---------------------------------------------------------
   static Future<DashboardData> getStudentDashboard(int alumnoId) async {
     final url = Uri.parse('$baseUrl/dashboard/$alumnoId');
     final response = await http.get(url);
@@ -296,9 +327,7 @@ class ApiService {
     }
   }
 
-  // ---------------------------------------------------------
   // 16. ENVIAR REPORTE DE SOPORTE
-  // ---------------------------------------------------------
   static Future<void> enviarReporteSoporte(
     int usuarioId,
     String email,
@@ -320,9 +349,7 @@ class ApiService {
     }
   }
 
-  // ---------------------------------------------------------
   // 17. OBTENER HISTORIAL ACADÉMICO REAL
-  // ---------------------------------------------------------
   static Future<Map<String, List<Materia>>> getHistorialAcademico(
     int alumnoId,
   ) async {
@@ -341,9 +368,8 @@ class ApiService {
 
       return semestres.map((semestre, materias) {
         final listaMaterias = (materias as List)
-            .map((m) => Materia.fromJson(m)) // <-- ASÍ SE USA TU MODELO
+            .map((m) => Materia.fromJson(m))
             .toList();
-
         return MapEntry(semestre, listaMaterias);
       });
     } else {
@@ -355,6 +381,7 @@ class ApiService {
 // ==========================================
 // MODELOS (Incluidos aquí para facilitar la copia)
 // ==========================================
+
 class GrupoFisico {
   final int id;
   final String nombre;
@@ -365,12 +392,10 @@ class GrupoFisico {
 }
 
 class Grupo {
-  final int id;
-  final int grupoIdReal;
-  final String nombre;
-  final String materia;
-  // Podemos agregar profesorId si lo necesitas en el frontend
-  // final int profesorId;
+  final int id; // mg.id
+  final int grupoIdReal; // grupos.id
+  final String nombre; // grupos.nombre
+  final String materia; // materias.nombre
 
   Grupo({
     required this.id,
@@ -393,7 +418,9 @@ class Alumno {
   final int id;
   final String nombre;
   final String correo;
+
   Alumno({required this.id, required this.nombre, required this.correo});
+
   factory Alumno.fromJson(Map<String, dynamic> json) {
     return Alumno(
       id: json['id'],
@@ -409,6 +436,7 @@ class Notificacion {
   final String mensaje;
   final bool leida;
   final String fecha;
+
   Notificacion({
     required this.id,
     required this.titulo,
@@ -416,6 +444,7 @@ class Notificacion {
     required this.leida,
     required this.fecha,
   });
+
   factory Notificacion.fromJson(Map<String, dynamic> json) {
     bool isLeida = json['leida'] == 1 || json['leida'] == true;
     return Notificacion(
@@ -424,6 +453,58 @@ class Notificacion {
       mensaje: json['mensaje'],
       leida: isLeida,
       fecha: json['fecha'] != null ? json['fecha'].toString() : '',
+    );
+  }
+}
+
+// =========================================================
+// ✅ NUEVOS MODELOS PARA /mis_grupos (AGRUPADO)
+// =========================================================
+class GrupoBundle {
+  final int grupoId; // grupos.id
+  final String nombre; // grupos.nombre
+  final int totalAlumnos;
+  final List<MateriaItem> materias;
+
+  GrupoBundle({
+    required this.grupoId,
+    required this.nombre,
+    required this.totalAlumnos,
+    required this.materias,
+  });
+
+  factory GrupoBundle.fromJson(Map<String, dynamic> json) {
+    final mats = (json['materias'] as List? ?? [])
+        .map((e) => MateriaItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+
+    return GrupoBundle(
+      grupoId: json['grupo_id'],
+      nombre: json['nombre'] ?? '',
+      totalAlumnos: (json['total_alumnos'] ?? 0) is int
+          ? (json['total_alumnos'] ?? 0)
+          : int.tryParse(json['total_alumnos'].toString()) ?? 0,
+      materias: mats,
+    );
+  }
+}
+
+class MateriaItem {
+  final int claseId; // ✅ mg.id (materias_grupos.id)
+  final int materiaId; // materias.id
+  final String materia; // materias.nombre
+
+  MateriaItem({
+    required this.claseId,
+    required this.materiaId,
+    required this.materia,
+  });
+
+  factory MateriaItem.fromJson(Map<String, dynamic> json) {
+    return MateriaItem(
+      claseId: json['clase_id'],
+      materiaId: json['materia_id'],
+      materia: json['materia'] ?? '',
     );
   }
 }

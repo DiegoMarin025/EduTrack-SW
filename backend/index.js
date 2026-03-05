@@ -60,20 +60,54 @@ app.get('/grupos', (req, res) => {
     });
 });
 
-// 2. OBTENER ALUMNOS DE UNA CLASE
-app.get('/grupos/:clase_id/alumnos', (req, res) => {
-    const { clase_id } = req.params;
-    const sql = `
-        SELECT u.id, u.nombre, u.email as correo 
-        FROM usuarios u
-        JOIN alumnos_grupos ag ON u.id = ag.alumno_id
-        WHERE ag.grupo_id = (SELECT grupo_id FROM materias_grupos WHERE id = ?) 
-        AND u.rol = 'alumno'
-    `;
-    db.query(sql, [clase_id], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(results);
-    });
+// ✅ 1B) OBTENER MIS GRUPOS AGRUPADOS (UN GRUPO, MUCHAS MATERIAS)
+app.get('/mis_grupos', (req, res) => {
+  const { profesor_id } = req.query;
+
+  if (!profesor_id) {
+    return res.status(400).json({ error: 'Falta profesor_id' });
+  }
+
+  const sql = `
+    SELECT 
+      g.id AS grupo_id,
+      g.nombre AS grupo_nombre,
+      mg.id AS clase_id,
+      m.id AS materia_id,
+      m.nombre AS materia_nombre,
+      (SELECT COUNT(*) 
+       FROM alumnos_grupos ag 
+       WHERE ag.grupo_id = g.id) AS total_alumnos
+    FROM materias_grupos mg
+    JOIN grupos g ON mg.grupo_id = g.id
+    JOIN materias m ON mg.materia_id = m.id
+    WHERE mg.profesor_id = ?
+    ORDER BY g.nombre ASC, m.nombre ASC
+  `;
+
+  db.query(sql, [profesor_id], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    // Agrupar: { grupo_id -> {grupo_nombre, total_alumnos, materias[] } }
+    const map = {};
+    for (const r of rows) {
+      if (!map[r.grupo_id]) {
+        map[r.grupo_id] = {
+          grupo_id: r.grupo_id,
+          nombre: r.grupo_nombre,
+          total_alumnos: r.total_alumnos || 0,
+          materias: []
+        };
+      }
+      map[r.grupo_id].materias.push({
+        clase_id: r.clase_id,          // ✅ mg.id (este es el que ocupa tu app)
+        materia_id: r.materia_id,
+        materia: r.materia_nombre
+      });
+    }
+
+    res.json(Object.values(map));
+  });
 });
 
 // 3. OBTENER CALIFICACIONES
