@@ -10,40 +10,44 @@ class RegisterPage extends StatefulWidget {
 class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
 
-  // Controladores originales + el nuevo del Tutor
+  // Controladores de texto
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
-  final TextEditingController _matriculaHijoController = TextEditingController(); // Agregado para el Tutor
+  final TextEditingController _matriculaHijoController = TextEditingController();
 
+  // Estado del formulario
+  String _rolSeleccionado = 'tutor'; 
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
-  // Lógica de registro adaptada para Tutor
+  // Función de Registro
   Future<void> _registrar() async {
     if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
+      setState(() => _isLoading = true);
 
       try {
+        final Map<String, dynamic> requestBody = {
+          'nombre': _nombreController.text,
+          'email': _emailController.text,
+          'password': _passwordController.text,
+          'rol': _rolSeleccionado,
+        };
+
+        if (_rolSeleccionado == 'tutor') {
+          requestBody['matricula_hijo'] = _matriculaHijoController.text;
+        }
+
         final response = await http.post(
-          // Mantengo tu endpoint, tu compañero de DB lo gestionará luego
           Uri.parse('http://localhost:3000/register'), 
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'nombre': _nombreController.text,
-            'email': _emailController.text,
-            'password': _passwordController.text,
-            'rol': 'tutor', // Forzamos el rol a tutor para tu rama
-            'matricula_hijo': _matriculaHijoController.text, // Campo obligatorio para el tutor
-          }),
+          body: jsonEncode(requestBody),
         );
 
         if (response.statusCode == 201) {
-          _showSnackBar('Registro de Tutor exitoso', Colors.green);
+          _showSnackBar('¡Registro exitoso!', Colors.green);
           Navigator.pop(context);
         } else {
           final errorData = jsonDecode(response.body);
@@ -52,9 +56,7 @@ class _RegisterPageState extends State<RegisterPage> {
       } catch (e) {
         _showSnackBar('Error de conexión con el servidor', Colors.red);
       } finally {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -62,9 +64,10 @@ class _RegisterPageState extends State<RegisterPage> {
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: color,
+        content: Text(message), 
+        backgroundColor: color, 
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -72,16 +75,16 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Mantenemos tu diseño de fondo y colores
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: Text('Registro de Tutor', 
+        title: Text('EduTrack', 
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.blue[900],
         elevation: 0,
         iconTheme: IconThemeData(color: Colors.white),
       ),
       body: Container(
+        height: double.infinity,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -94,7 +97,7 @@ class _RegisterPageState extends State<RegisterPage> {
             child: Padding(
               padding: const EdgeInsets.all(24.0),
               child: Card(
-                elevation: 8,
+                elevation: 10,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                 child: Padding(
                   padding: const EdgeInsets.all(32.0),
@@ -103,25 +106,25 @@ class _RegisterPageState extends State<RegisterPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.family_restroom, size: 80, color: Colors.blue[900]), // Cambiado a ícono de familia
-                        SizedBox(height: 16),
-                        Text(
-                          'Bienvenido Tutor',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue[900],
-                          ),
+                        // ÍCONO DINÁMICO (Mantiene la ayuda visual)
+                        Icon(
+                          _rolSeleccionado == 'tutor' ? Icons.family_restroom : Icons.school, 
+                          size: 80, 
+                          color: Colors.blue[900]
                         ),
-                        SizedBox(height: 8),
+                        SizedBox(height: 16),
+                        
+                        // TÍTULO SIMPLIFICADO SEGÚN TU PETICIÓN
                         Text(
-                          'Crea una cuenta para seguir el progreso de tu hijo',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey[600]),
+                          'Registro',
+                          style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.blue[900]),
                         ),
                         SizedBox(height: 32),
 
-                        // Nombre completo
+                        // Selector de Rol
+                        _buildDropdownRol(),
+                        SizedBox(height: 20),
+
                         _buildTextField(
                           controller: _nombreController,
                           label: 'Nombre Completo',
@@ -130,7 +133,6 @@ class _RegisterPageState extends State<RegisterPage> {
                         ),
                         SizedBox(height: 20),
 
-                        // Email
                         _buildTextField(
                           controller: _emailController,
                           label: 'Correo Electrónico',
@@ -144,20 +146,18 @@ class _RegisterPageState extends State<RegisterPage> {
                         ),
                         SizedBox(height: 20),
 
-                        // MATRÍCULA DEL HIJO (EL CAMBIO CLAVE)
-                        _buildTextField(
-                          controller: _matriculaHijoController,
-                          label: 'Matrícula del Hijo',
-                          icon: Icons.badge_outlined,
-                          hint: 'Ej. 202300456',
-                          validator: (value) {
-                            if (value == null || value.isEmpty) return 'La matrícula es obligatoria';
-                            return null;
-                          },
-                        ),
-                        SizedBox(height: 20),
+                        // Campo de matrícula solo si es Tutor
+                        if (_rolSeleccionado == 'tutor') ...[
+                          _buildTextField(
+                            controller: _matriculaHijoController,
+                            label: 'Matrícula del Hijo',
+                            icon: Icons.badge_outlined,
+                            hint: 'Ej. 202300456',
+                            validator: (value) => value!.isEmpty ? 'La matrícula es obligatoria' : null,
+                          ),
+                          SizedBox(height: 20),
+                        ],
 
-                        // Contraseña
                         _buildPasswordField(
                           controller: _passwordController,
                           label: 'Contraseña',
@@ -167,20 +167,15 @@ class _RegisterPageState extends State<RegisterPage> {
                         ),
                         SizedBox(height: 20),
 
-                        // Confirmar Contraseña
                         _buildPasswordField(
                           controller: _confirmPasswordController,
                           label: 'Confirmar Contraseña',
                           obscure: _obscureConfirmPassword,
                           onToggle: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
-                          validator: (value) {
-                            if (value != _passwordController.text) return 'Las contraseñas no coinciden';
-                            return null;
-                          },
+                          validator: (value) => value != _passwordController.text ? 'No coinciden' : null,
                         ),
                         SizedBox(height: 40),
 
-                        // Botón de Registro
                         _isLoading
                             ? CircularProgressIndicator()
                             : SizedBox(
@@ -191,15 +186,11 @@ class _RegisterPageState extends State<RegisterPage> {
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.blue[900],
                                     foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                                     elevation: 5,
                                   ),
-                                  child: Text(
-                                    'REGISTRAR TUTOR',
-                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                                  ),
+                                  child: Text('CONTINUAR', 
+                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                                 ),
                               ),
                       ],
@@ -214,7 +205,26 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  // Helpers para mantener tu código limpio y largo como el original
+  // --- COMPONENTES DE DISEÑO ---
+
+  Widget _buildDropdownRol() {
+    return DropdownButtonFormField<String>(
+      value: _rolSeleccionado,
+      decoration: InputDecoration(
+        labelText: 'Tipo de Usuario',
+        prefixIcon: Icon(Icons.people_alt_outlined, color: Colors.blue[900]),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        filled: true,
+        fillColor: Colors.grey[50],
+      ),
+      items: [
+        DropdownMenuItem(value: 'tutor', child: Text('Tutor / Padre')),
+        DropdownMenuItem(value: 'docente', child: Text('Docente / Maestro')),
+      ],
+      onChanged: (value) => setState(() => _rolSeleccionado = value!),
+    );
+  }
+
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
