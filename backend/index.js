@@ -2,28 +2,25 @@
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
+require('dotenv').config();
 
 const app = express();
 const PORT = 3000;
 
-// MIDDLEWARE
 app.use(cors());
 app.use(express.json());
 
 // CONEXIÓN A MYSQL
 const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
-  password: 'MYSQLDIEGO', // <--- TU CONTRASEÑA
-  database: 'edutrack'
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME
 });
 
 db.connect((err) => {
-  if (err) {
-    console.error('Error al conectar a la DB:', err);
-  } else {
-    console.log(' Conectado a la base de datos MySQL (EduTrack Final)');
-  }
+  if (err) console.error('Error al conectar a la DB:', err);
+  else console.log(' Conectado a la base de datos MySQL (EduTrack Final)');
 });
 
 // ================= FUNCIÓN AUXILIAR =================
@@ -209,45 +206,47 @@ app.get('/notificaciones/:usuario_id', (req, res) => {
     });
 });
 
-// 6. REGISTRO
+// 6. REGISTRO ACTUALIZADO PARA TUTOR (REQUERIMIENTO 3.1)
 app.post('/register', (req, res) => {
-    const { nombre, correo, contrasena, tipo_usuario } = req.body;
-    let rol = tipo_usuario.toLowerCase();
-    if (rol === 'maestro') rol = 'profesor';
+    const { nombre, email, password, rol, matricula_hijo } = req.body;
 
-    const sql = 'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, ?)';
-    db.query(sql, [nombre, correo, contrasena, rol], (err, result) => {
-        if (err) {
-             if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'El correo ya está registrado' });
-             return res.status(500).json({ error: err.message });
-        }
-        // Notificación de bienvenida
-        crearNotificacion(result.insertId, 'Bienvenido a EduTrack', 'Tu cuenta ha sido creada exitosamente.');
-        res.json({ message: 'Registrado exitosamente', id: result.insertId });
-    });
+    // Si el que se registra es un tutor, verificamos la matrícula del hijo primero
+    if (rol === 'tutor') {
+        const checkSql = 'SELECT id FROM usuarios WHERE id = ? AND rol = "alumno"';
+        db.query(checkSql, [matricula_hijo], (err, results) => {
+            if (err) return res.status(500).json({ error: err.message });
+            
+            if (results.length === 0) {
+                return res.status(400).json({ error: 'Seguridad: La matrícula del hijo no existe.' });
+            }
+
+            // Si existe, procedemos a insertar al tutor
+            const sqlInsert = 'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, ?)';
+            db.query(sqlInsert, [nombre, email, password, rol], (err, result) => {
+                if (err) return res.status(500).json({ error: err.message });
+                crearNotificacion(result.insertId, 'Bienvenido Tutor', 'Tu cuenta ha sido vinculada correctamente.');
+                res.status(201).json({ message: 'Tutor registrado exitosamente', id: result.insertId });
+            });
+        });
+    } else {
+        // Registro normal para otros roles
+        const sql = 'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, ?)';
+        db.query(sql, [nombre, email, password, rol], (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.status(201).json({ message: 'Registrado exitosamente', id: result.insertId });
+        });
+    }
 });
 
+// Mantén el resto de tus rutas (login, grupos, etc.) igual que antes...
 app.post('/login', (req, res) => {
-    // YA NO pedimos 'tipo_usuario' en el body
     const { correo, contrasena } = req.body;
-
-    // Buscamos solo por email y password
     const sql = 'SELECT * FROM usuarios WHERE email = ? AND password = ?';
-    
     db.query(sql, [correo, contrasena], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
-        
         if (results.length > 0) {
             const u = results[0];
-            // Devolvemos el rol que está en la base de datos
-            res.json({ 
-                message: 'Login OK', 
-                usuario: { 
-                    id: u.id, 
-                    nombre: u.nombre, 
-                    rol: u.rol 
-                } 
-            });
+            res.json({ message: 'Login OK', usuario: { id: u.id, nombre: u.nombre, rol: u.rol } });
         } else {
             res.status(401).json({ error: 'Credenciales incorrectas' });
         }

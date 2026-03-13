@@ -5,7 +5,7 @@ import 'pantallas/calendario_screen.dart';
 import 'pantallas/ayuda_screen.dart';
 import 'pantallas/notificaciones.dart';
 import 'login_page.dart';
-import 'pantallas/student_dashboard_screen.dart';
+import 'pantallas/tutor/tutor_dashboard.dart';
 
 class MainLayout extends StatefulWidget {
   final String username;
@@ -56,7 +56,7 @@ class _MainLayoutState extends State<MainLayout> {
   }
 
   List<Widget> get _widgetOptions => <Widget>[
-    StudentDashboardScreen(userId: widget.usuarioId),
+    TutorDashboard(userId: widget.usuarioId),
     HistorialAcademicoScreen(
       alumnoId: widget.usuarioId,
       onNavigate: _onSelectItem,

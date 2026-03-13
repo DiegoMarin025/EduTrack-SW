@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:app_calificaciones/pantallas/ayuda_screen.dart';
 import '/pantallas/ayuda_screen.dart';
 
 class EdutrackSupportApp extends StatelessWidget {
