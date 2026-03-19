@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../assistant/assistant_feature.dart';
+import '../assistant/teacher_owl_assistant.dart';
 import '../pantallas/notificaciones.dart';
 import '../pantallas/ayuda_screen.dart';
 import '../login_page.dart';
 import 'panel_docente_screen.dart';
 import 'mis_grupos_screen.dart';
+import 'planeacion_screen.dart';
 import 'subir_calificaciones_screen.dart';
+import 'teacher_navigation_helper.dart';
 
 class MainLayoutMaestros extends StatefulWidget {
   const MainLayoutMaestros({super.key});
@@ -16,6 +20,7 @@ class MainLayoutMaestros extends StatefulWidget {
 
 class _MainLayoutMaestrosState extends State<MainLayoutMaestros> {
   int _selectedIndex = 0;
+  late final List<Widget> _widgetOptions;
 
   // Variables para datos del perfil
   String _nombreDisplay = 'Cargando...';
@@ -25,6 +30,13 @@ class _MainLayoutMaestrosState extends State<MainLayoutMaestros> {
   @override
   void initState() {
     super.initState();
+    _widgetOptions = <Widget>[
+      PanelDocenteScreen(onNavigateToSection: _selectSection), // 0
+      const MisGruposScreen(), // 1
+      const SubirCalificacionesScreen(), // 2
+      const PlaneacionScreen(), // 3
+      const AyudaScreen(), // 4
+    ];
     _cargarDatosUsuario();
   }
 
@@ -44,27 +56,52 @@ class _MainLayoutMaestrosState extends State<MainLayoutMaestros> {
     }
   }
 
-  // 1. LISTA DE PANTALLAS
-  static final List<Widget> _widgetOptions = <Widget>[
-    const PanelDocenteScreen(), // 0
-    const MisGruposScreen(), // 1
-    const SubirCalificacionesScreen(), // 2
-    const AyudaScreen(), // 3
-  ];
-
   // 2. TÍTULOS
   static const List<String> _titles = [
     'Panel Docente',
     'Mis Grupos',
     'Subir Calificaciones',
+    'Planeacion',
     'Ayuda y Soporte',
   ];
 
-  void _onSelectItem(int index) {
+  void _selectSection(int index, {bool closeDrawer = false}) {
     setState(() {
       _selectedIndex = index;
     });
-    Navigator.of(context).pop();
+
+    if (closeDrawer) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _onSelectItem(int index) {
+    _selectSection(index, closeDrawer: true);
+  }
+
+  Future<void> _handleAssistantAction(
+    TeacherAssistantActionType action,
+  ) async {
+    switch (action) {
+      case TeacherAssistantActionType.openDashboard:
+        _selectSection(0);
+        break;
+      case TeacherAssistantActionType.openGroups:
+        _selectSection(1);
+        break;
+      case TeacherAssistantActionType.openGrades:
+        _selectSection(2);
+        break;
+      case TeacherAssistantActionType.openSupport:
+        _selectSection(4);
+        break;
+      case TeacherAssistantActionType.quickAttendance:
+        await TeacherNavigationHelper.openQuickAttendance(
+          context: context,
+          profesorId: _usuarioId,
+        );
+        break;
+    }
   }
 
   @override
@@ -124,9 +161,14 @@ class _MainLayoutMaestrosState extends State<MainLayoutMaestros> {
                       endIndent: 16,
                     ),
                     _buildDrawerItem(
+                      icon: Icons.edit_calendar_rounded,
+                      text: 'Planeacion',
+                      index: 3,
+                    ),
+                    _buildDrawerItem(
                       icon: Icons.help_outline_rounded,
                       text: 'Ayuda y Soporte',
-                      index: 3,
+                      index: 4,
                     ),
                   ],
                 ),
@@ -168,7 +210,20 @@ class _MainLayoutMaestrosState extends State<MainLayoutMaestros> {
           ),
         ),
       ),
-      body: _widgetOptions.elementAt(_selectedIndex),
+      body: Stack(
+        children: [
+          Positioned.fill(child: _widgetOptions.elementAt(_selectedIndex)),
+          if (kTeacherOwlAssistantEnabled)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: TeacherOwlAssistant(
+                selectedSection: _selectedIndex,
+                onActionSelected: _handleAssistantAction,
+              ),
+            ),
+        ],
+      ),
     );
   }
 

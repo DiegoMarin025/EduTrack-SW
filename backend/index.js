@@ -13,8 +13,8 @@ app.use(express.json());
 // CONEXIÓN A MYSQL
 const db = mysql.createConnection({
   host: 'localhost',
-  user: 'root',
-  password: 'MYSQLDIEGO', // <--- TU CONTRASEÑA
+  user: 'Universidad',
+  password: 'UbiTime#2026!', // <--- TU CONTRASEÑA
   database: 'edutrack'
 });
 
@@ -419,8 +419,15 @@ app.get('/dashboard/:id', (req, res) => {
 
 // 16. REPORTE SOPORTE
 app.post('/reportes_soporte', (req, res) => {
-    const { usuario_id, email, mensaje } = req.body;
-    db.query('INSERT INTO reportes_soporte (usuario_id, email, mensaje) VALUES (?, ?, ?)', [usuario_id, email, mensaje], (err, result) => {
+    const usuarioId = Number.parseInt(req.body.usuario_id, 10);
+    const email = String(req.body.email || '').trim();
+    const mensaje = String(req.body.mensaje || '').trim();
+
+    if (!email || !mensaje) {
+        return res.status(400).json({ error: 'Faltan datos del reporte' });
+    }
+
+    db.query('INSERT INTO reportes_soporte (usuario_id, email, mensaje) VALUES (?, ?, ?)', [Number.isNaN(usuarioId) ? 0 : usuarioId, email, mensaje], (err, result) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: 'Reporte guardado', id: result.insertId });
     });

@@ -19,11 +19,27 @@ class _Solution1SoporteState extends State<Solution1Soporte> {
   bool _isSending = false;
   int _usuarioId = 0;
   String _userEmail = '';
+  bool get _canSend =>
+      aceptaInfo && detallesController.text.trim().isNotEmpty && !_isSending;
 
   @override
   void initState() {
     super.initState();
+    detallesController.addListener(_onDetallesChanged);
     _cargarDatosUsuario();
+  }
+
+  void _onDetallesChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    detallesController.removeListener(_onDetallesChanged);
+    detallesController.dispose();
+    super.dispose();
   }
 
   // Cargamos ID y Correo del usuario logueado (o guardado en caché)
@@ -196,12 +212,7 @@ class _Solution1SoporteState extends State<Solution1Soporte> {
                       Expanded(
                         child: ElevatedButton(
                           // Solo activa el botón si aceptó el checkbox y escribió algo
-                          onPressed:
-                              (aceptaInfo &&
-                                  detallesController.text.isNotEmpty &&
-                                  !_isSending)
-                              ? _enviarReporte
-                              : null,
+                          onPressed: _canSend ? _enviarReporte : null,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.deepPurple,
                             foregroundColor: Colors.white,
