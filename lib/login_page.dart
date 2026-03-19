@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'services/api_service.dart';
-import 'register_page.dart';
+
 import 'main_layout.dart';
 import 'pantallasmaestros/main_layout_maestros_screen.dart';
+import 'register_page.dart';
+import 'services/api_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -58,7 +59,7 @@ class _LoginPageState extends State<LoginPage>
   void login() async {
     if (emailController.text.isEmpty || passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Por favor completa todos los campos")),
+        const SnackBar(content: Text('Por favor completa todos los campos')),
       );
       return;
     }
@@ -80,7 +81,7 @@ class _LoginPageState extends State<LoginPage>
       await prefs.setString('saved_password', passwordController.text.trim());
       await prefs.setString('saved_userType', rolReal);
 
-      int userId = usuario['id'];
+      final int userId = usuario['id'];
       await prefs.setInt('saved_id', userId);
       await prefs.setString('saved_name', usuario['nombre']);
 
@@ -106,7 +107,7 @@ class _LoginPageState extends State<LoginPage>
     final displayName = rawName.toString().split(' ')[0];
     final int userId = usuario['id'];
 
-    if (rol == "profesor" || rol == "maestro") {
+    if (rol == 'profesor' || rol == 'maestro') {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const MainLayoutMaestros()),
@@ -150,57 +151,177 @@ class _LoginPageState extends State<LoginPage>
   Widget _buildWebLayout() {
     return Row(
       children: [
-        /// 🔵 LADO IZQUIERDO
         Expanded(
           flex: 5,
-          child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 80),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Bienvenido a EduTrack",
-                    style: TextStyle(
-                      fontSize: 40,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    "Gestión académica inteligente\npara maestros y padres",
-                    style: TextStyle(fontSize: 20, color: Colors.white70),
-                  ),
-                  const SizedBox(height: 50),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final titleSize = constraints.maxWidth > 720 ? 58.0 : 48.0;
+              final subtitleSize = constraints.maxWidth > 720 ? 18.0 : 16.0;
+              final sidePadding = constraints.maxWidth > 920 ? 84.0 : 56.0;
 
-                  Center(
-                    child: Image.asset(
-                      'lib/image/login.png',
-                      width: 350,
-                      fit: BoxFit.contain,
-                    ),
+              return Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xFF0B2F87),
+                      Color(0xFF1D49B8),
+                      Color(0xFF2A5ED5),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                ],
+                ),
+                child: Stack(
+                  children: [
+                    Positioned(
+                      top: 64,
+                      left: 48,
+                      child: _buildAmbientBlob(
+                        size: 120,
+                        color: const Color(0xFF7DD3FC).withOpacity(0.10),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 92,
+                      left: 110,
+                      child: _buildAmbientBlob(
+                        size: 150,
+                        color: const Color(0xFF38BDF8).withOpacity(0.08),
+                      ),
+                    ),
+                    Positioned(
+                      top: 240,
+                      right: 72,
+                      child: _buildAmbientBlob(
+                        size: 220,
+                        color: const Color(0xFFA5B4FC).withOpacity(0.12),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: SingleChildScrollView(
+                          padding: EdgeInsets.fromLTRB(
+                            sidePadding,
+                            56,
+                            sidePadding,
+                            56,
+                          ),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 560),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(
+                                      color: Colors.white.withOpacity(0.18),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Plataforma escolar inteligente',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 28),
+                                Text(
+                                  'Bienvenido a\nEduTrack',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: titleSize,
+                                    height: 1.02,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                Text(
+                                  'Gesti\u00f3n acad\u00e9mica inteligente\npara maestros y padres',
+                                  style: TextStyle(
+                                    color: const Color(0xFFDCE8FF),
+                                    fontSize: subtitleSize,
+                                    height: 1.5,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                                const SizedBox(height: 42),
+                                _buildHeroIllustration(),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        Expanded(
+          flex: 4,
+          child: Center(
+            child: SizedBox(width: 420, child: _buildLoginCard()),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAmbientBlob({required double size, required Color color}) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(color: color, blurRadius: size * 0.55, spreadRadius: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroIllustration() {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.white.withOpacity(0.12)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.18),
+                blurRadius: 26,
+                offset: const Offset(0, 18),
               ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: AspectRatio(
+              aspectRatio: 1.12,
+              child: Image.asset('lib/image/login.png', fit: BoxFit.cover),
             ),
           ),
         ),
-
-        /// LADO DERECHO
-        Expanded(
-          flex: 4,
-          child: Center(child: SizedBox(width: 420, child: _buildLoginCard())),
-        ),
-      ],
+      ),
     );
   }
 
@@ -221,10 +342,10 @@ class _LoginPageState extends State<LoginPage>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Image.asset('lib/image/logotipo.png', height: 200),
+          Image.asset('lib/image/Logotipo.png', height: 200),
           const SizedBox(height: 25),
           const Text(
-            "Iniciar Sesión",
+            'Iniciar Sesi\u00f3n',
             style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.bold,
@@ -234,13 +355,13 @@ class _LoginPageState extends State<LoginPage>
           const SizedBox(height: 30),
           _modernTextField(
             controller: emailController,
-            hint: "Correo electrónico",
+            hint: 'Correo electr\u00f3nico',
             icon: Icons.email_outlined,
           ),
           const SizedBox(height: 20),
           _modernTextField(
             controller: passwordController,
-            hint: "Contraseña",
+            hint: 'Contrase\u00f1a',
             icon: Icons.lock_outline,
             isPassword: true,
           ),
@@ -255,7 +376,7 @@ class _LoginPageState extends State<LoginPage>
               );
             },
             child: const Text(
-              "¿No tienes cuenta? Regístrate",
+              '\u00bfNo tienes cuenta? Reg\u00edstrate',
               style: TextStyle(color: Color(0xFF1E3A8A)),
             ),
           ),
@@ -329,7 +450,7 @@ class _LoginPageState extends State<LoginPage>
                   ),
                 )
               : const Text(
-                  "Ingresar",
+                  'Ingresar',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,

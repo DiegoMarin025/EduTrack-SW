@@ -71,6 +71,27 @@ class ApiService {
 
   // 3. OBTENER CALIFICACIÓN
   // OJO: grupoId aquí en realidad es "mg.id" (materias_grupos.id)
+  static Future<List<CalificacionesResumenAlumno>> getCalificacionesResumen(
+    int grupoId,
+  ) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/grupos/$grupoId/calificaciones_resumen'),
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body);
+      return data
+          .map(
+            (item) => CalificacionesResumenAlumno.fromJson(
+              item as Map<String, dynamic>,
+            ),
+          )
+          .toList();
+    } else {
+      throw Exception('Error al cargar el libro de calificaciones');
+    }
+  }
+
   static Future<String?> getCalificacion(int alumnoId, int grupoId) async {
     final response = await http.get(
       Uri.parse(
@@ -112,6 +133,54 @@ class ApiService {
   }
 
   // 5. OBTENER NOTIFICACIONES
+  static Future<List<ActividadCalificacion>> getActividadesCalificacion(
+    int alumnoId,
+    int grupoId,
+  ) async {
+    final response = await http.get(
+      Uri.parse(
+        '$baseUrl/calificaciones_actividades?alumno_id=$alumnoId&grupo_id=$grupoId',
+      ),
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body);
+      return data
+          .map(
+            (item) =>
+                ActividadCalificacion.fromJson(item as Map<String, dynamic>),
+          )
+          .toList();
+    } else {
+      throw Exception('Error al cargar actividades');
+    }
+  }
+
+  static Future<void> guardarActividadCalificacion({
+    required int alumnoId,
+    required int grupoId,
+    required String titulo,
+    double? calificacion,
+    String? comentario,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/calificaciones_actividades'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'alumno_id': alumnoId,
+        'grupo_id': grupoId,
+        'titulo': titulo,
+        'calificacion': calificacion,
+        'comentario': comentario,
+      }),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final body = json.decode(response.body);
+      throw Exception(body['error'] ?? 'Error al guardar actividad');
+    }
+  }
+
   static Future<List<Notificacion>> getNotificaciones(int usuarioId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/notificaciones/$usuarioId'),
@@ -378,6 +447,18 @@ class ApiService {
   }
 } // FIN DE ApiService
 
+double? _asNullableDouble(dynamic value) {
+  if (value == null) return null;
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value);
+  return null;
+}
+
+int _asInt(dynamic value) {
+  if (value is int) return value;
+  return int.tryParse(value.toString()) ?? 0;
+}
+
 // ==========================================
 // MODELOS (Incluidos aquí para facilitar la copia)
 // ==========================================
@@ -426,6 +507,84 @@ class Alumno {
       id: json['id'],
       nombre: json['nombre'] ?? 'Sin nombre',
       correo: json['correo'] ?? (json['email'] ?? 'Sin correo'),
+    );
+  }
+}
+
+class CalificacionesResumenAlumno {
+  final int id;
+  final String nombre;
+  final String correo;
+  final double? calificacionFinal;
+  final int totalActividades;
+  final double? promedioActividades;
+  final String ultimoComentario;
+
+  const CalificacionesResumenAlumno({
+    required this.id,
+    required this.nombre,
+    required this.correo,
+    required this.calificacionFinal,
+    required this.totalActividades,
+    required this.promedioActividades,
+    required this.ultimoComentario,
+  });
+
+  factory CalificacionesResumenAlumno.fromJson(Map<String, dynamic> json) {
+    return CalificacionesResumenAlumno(
+      id: _asInt(json['id']),
+      nombre: json['nombre']?.toString() ?? 'Sin nombre',
+      correo: json['correo']?.toString() ?? 'Sin correo',
+      calificacionFinal: _asNullableDouble(json['calificacion_final']),
+      totalActividades: _asInt(json['total_actividades']),
+      promedioActividades: _asNullableDouble(json['promedio_actividades']),
+      ultimoComentario: json['ultimo_comentario']?.toString() ?? '',
+    );
+  }
+
+  CalificacionesResumenAlumno copyWith({
+    double? calificacionFinal,
+    int? totalActividades,
+    double? promedioActividades,
+    String? ultimoComentario,
+  }) {
+    return CalificacionesResumenAlumno(
+      id: id,
+      nombre: nombre,
+      correo: correo,
+      calificacionFinal: calificacionFinal ?? this.calificacionFinal,
+      totalActividades: totalActividades ?? this.totalActividades,
+      promedioActividades: promedioActividades ?? this.promedioActividades,
+      ultimoComentario: ultimoComentario ?? this.ultimoComentario,
+    );
+  }
+}
+
+class ActividadCalificacion {
+  final int id;
+  final String titulo;
+  final double? calificacion;
+  final String comentario;
+  final String fecha;
+  final String tipo;
+
+  const ActividadCalificacion({
+    required this.id,
+    required this.titulo,
+    required this.calificacion,
+    required this.comentario,
+    required this.fecha,
+    required this.tipo,
+  });
+
+  factory ActividadCalificacion.fromJson(Map<String, dynamic> json) {
+    return ActividadCalificacion(
+      id: _asInt(json['id']),
+      titulo: json['titulo']?.toString() ?? 'Actividad',
+      calificacion: _asNullableDouble(json['calificacion']),
+      comentario: json['comentario']?.toString() ?? '',
+      fecha: json['fecha']?.toString() ?? '',
+      tipo: json['tipo']?.toString() ?? 'actividad',
     );
   }
 }
@@ -513,19 +672,36 @@ class MateriaItem {
 // MODELOS DEL DASHBOARD
 // ---------------------------------------------------------
 class Subject {
+  final int claseId;
   final String materia;
   final double? calificacion;
   final String estado;
+  final int totalActividades;
+  final List<ActividadCalificacion> actividades;
 
-  Subject({required this.materia, this.calificacion, required this.estado});
+  Subject({
+    required this.claseId,
+    required this.materia,
+    this.calificacion,
+    required this.estado,
+    required this.totalActividades,
+    required this.actividades,
+  });
 
   factory Subject.fromJson(Map<String, dynamic> json) {
+    final rawActivities = json['actividades'] as List? ?? const [];
     return Subject(
+      claseId: _asInt(json['clase_id']),
       materia: json['materia'] as String,
-      calificacion: json['calificacion'] != null
-          ? (json['calificacion'] as num).toDouble()
-          : null,
+      calificacion: _asNullableDouble(json['calificacion']),
       estado: json['estado'] as String,
+      totalActividades: _asInt(json['total_actividades']),
+      actividades: rawActivities
+          .map(
+            (item) =>
+                ActividadCalificacion.fromJson(item as Map<String, dynamic>),
+          )
+          .toList(),
     );
   }
 }
@@ -568,7 +744,7 @@ class DashboardData {
         .toList();
 
     return DashboardData(
-      average: (json['average'] as num).toDouble(),
+      average: _asNullableDouble(json['average']) ?? 0,
       student: StudentData.fromJson(json['student'] as Map<String, dynamic>),
       subjects: subjectsList,
     );

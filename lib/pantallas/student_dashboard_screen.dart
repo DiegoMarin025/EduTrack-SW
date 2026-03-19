@@ -245,33 +245,141 @@ class AcademicDetailsSection extends StatelessWidget {
   }
 
   Widget _buildSubjectItem(Subject subject) {
-    String info = subject.estado;
-    Color colorInfo = subject.estado == 'Aprobada'
+    final String info = subject.estado;
+    final Color colorInfo = subject.estado == 'Aprobada'
         ? Colors.green
         : (subject.estado == 'Reprobada' ? Colors.red : Colors.grey);
-    String displayText = subject.materia;
-    if (subject.calificacion != null)
-      displayText += ' (${subject.calificacion})';
+    final latestActivities = subject.actividades.take(2).toList();
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5.0),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              displayText,
-              style: const TextStyle(fontSize: 16, color: Colors.black87),
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    subject.materia,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorInfo.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    info,
+                    style: TextStyle(
+                      color: colorInfo,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          Text(
-            info,
-            style: TextStyle(
-              color: colorInfo,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _buildBadge(
+                  label: subject.calificacion != null
+                      ? 'Final ${subject.calificacion!.toStringAsFixed(1)}'
+                      : 'Sin final',
+                ),
+                const SizedBox(width: 8),
+                _buildBadge(
+                  label: '${subject.totalActividades} actividades',
+                ),
+              ],
             ),
-          ),
-        ],
+            if (latestActivities.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'Últimos movimientos',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...latestActivities.map(
+                (activity) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                activity.titulo,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            if (activity.calificacion != null)
+                              Text(
+                                activity.calificacion!.toStringAsFixed(1),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                          ],
+                        ),
+                        if (activity.comentario.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            activity.comentario,
+                            style: const TextStyle(color: Colors.black54),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBadge({required String label}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3E8FF),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Color(0xFF6B21A8),
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+        ),
       ),
     );
   }

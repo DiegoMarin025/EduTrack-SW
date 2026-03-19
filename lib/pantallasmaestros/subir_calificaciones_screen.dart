@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // IMPORTANTE: Para obtener el ID
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 
 class SubirCalificacionesScreen extends StatefulWidget {
@@ -11,367 +11,959 @@ class SubirCalificacionesScreen extends StatefulWidget {
 }
 
 class _SubirCalificacionesScreenState extends State<SubirCalificacionesScreen> {
-  List<Grupo> _grupos = [];
-  int? _selectedGrupoId;
-  int _profesorId = 0; // ID del profesor logueado
-
-  bool _loading = false;
-  List<Alumno> _alumnos = [];
-
-  final Map<int, String?> _calificaciones = {};
-  final Map<int, TextEditingController> _controllers = {};
-  final Map<int, bool> _isEditing = {};
-
   final TextEditingController _searchController = TextEditingController();
+  final Map<int, TextEditingController> _gradeControllers = {};
+  final Map<int, bool> _savingRows = {};
+
+  List<Grupo> _grupos = [];
+  List<CalificacionesResumenAlumno> _rows = [];
+  Grupo? _selectedGrupo;
+  int _profesorId = 0;
+  bool _loading = false;
   String _searchText = '';
 
   @override
   void initState() {
     super.initState();
-    _cargarDatosUsuario(); // Primero cargamos usuario, luego grupos
-
+    _cargarDatosUsuario();
     _searchController.addListener(() {
-      setState(() => _searchText = _searchController.text);
+      setState(() => _searchText = _searchController.text.trim().toLowerCase());
     });
   }
 
-  // 1. Obtener el ID del profesor
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _disposeRowControllers();
+    super.dispose();
+  }
+
   Future<void> _cargarDatosUsuario() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _profesorId = prefs.getInt('saved_id') ?? 0;
     });
 
-    // Solo cargamos grupos si hay un ID válido
     if (_profesorId != 0) {
-      _cargarGrupos();
+      await _cargarGrupos();
     }
   }
 
-  // 2. Cargar grupos filtrados
   Future<void> _cargarGrupos() async {
     try {
-      // Enviamos el profesorId para obtener solo SUS grupos
       final grupos = await ApiService.getGrupos(profesorId: _profesorId);
-      if (mounted) {
-        setState(() => _grupos = grupos);
-      }
+      if (!mounted) return;
+      setState(() => _grupos = grupos);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error cargando grupos: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error cargando grupos: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
-  Future<void> _fetchAlumnos(int grupoId) async {
+  Future<void> _fetchLibro(int grupoId) async {
     setState(() => _loading = true);
-    _alumnos.clear();
-    _controllers.clear();
-    _calificaciones.clear();
-    _isEditing.clear();
+    _disposeRowControllers();
 
     try {
-      final alumnos = await ApiService.getAlumnosPorGrupo(grupoId);
+      final rows = await ApiService.getCalificacionesResumen(grupoId);
+      if (!mounted) return;
 
       setState(() {
-        _alumnos = alumnos;
-        for (var alumno in alumnos) {
-          _controllers[alumno.id] = TextEditingController();
-          _isEditing[alumno.id] = false;
+        _rows = rows;
+        for (final row in rows) {
+          _gradeControllers[row.id] = TextEditingController(
+            text: _formatEditableGrade(row.calificacionFinal),
+          );
+          _savingRows[row.id] = false;
         }
       });
-
-      for (var alumno in alumnos) {
-        final calif = await ApiService.getCalificacion(alumno.id, grupoId);
-        if (mounted && calif != null) {
-          setState(() {
-            _calificaciones[alumno.id] = calif;
-            _controllers[alumno.id]?.text = calif;
-          });
-        }
-      }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error cargando alumnos: $e'),
+          content: Text('Error cargando libro de calificaciones: $e'),
           backgroundColor: Colors.red,
         ),
       );
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _guardarCalificacion(Alumno alumno) async {
-    if (_selectedGrupoId == null) return;
+  void _disposeRowControllers() {
+    for (final controller in _gradeControllers.values) {
+      controller.dispose();
+    }
+    _gradeControllers.clear();
+    _savingRows.clear();
+  }
 
-    final value = _controllers[alumno.id]?.text.trim();
-    if (value == null || value.isEmpty) return;
+  Future<void> _guardarCalificacionFinal(
+    CalificacionesResumenAlumno alumno,
+  ) async {
+    final grupo = _selectedGrupo;
+    if (grupo == null) return;
 
-    final double? numValue = double.tryParse(value);
-    if (numValue == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Ingresa un número válido')));
+    final rawValue = _gradeControllers[alumno.id]?.text.trim() ?? '';
+    if (rawValue.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa una calificación primero')),
+      );
       return;
     }
 
-    try {
-      await ApiService.guardarCalificacion(
-        alumno.id,
-        _selectedGrupoId!,
-        numValue,
+    final calificacion = double.tryParse(rawValue);
+    if (calificacion == null || calificacion < 0 || calificacion > 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La calificación debe estar entre 0 y 10')),
       );
+      return;
+    }
 
-      setState(() => _calificaciones[alumno.id] = value);
+    setState(() => _savingRows[alumno.id] = true);
+
+    try {
+      await ApiService.guardarCalificacion(alumno.id, grupo.id, calificacion);
+      if (!mounted) return;
+
+      setState(() {
+        final index = _rows.indexWhere((item) => item.id == alumno.id);
+        if (index != -1) {
+          _rows[index] = _rows[index].copyWith(calificacionFinal: calificacion);
+        }
+        _gradeControllers[alumno.id]?.text = _formatEditableGrade(calificacion);
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Calificación de ${alumno.nombre} guardada."),
+          content: Text('Calificación final guardada para ${alumno.nombre}.'),
           backgroundColor: Colors.green,
-          duration: const Duration(seconds: 1),
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Error al guardar: $e"),
+          content: Text('Error al guardar: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _savingRows[alumno.id] = false);
+    }
+  }
+
+  void _llenarConDiez(CalificacionesResumenAlumno alumno) {
+    _gradeControllers[alumno.id]?.text = '10';
+  }
+
+  Future<void> _abrirDetalleAlumno(CalificacionesResumenAlumno alumno) async {
+    final grupo = _selectedGrupo;
+    if (grupo == null) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AlumnoActividadSheet(
+        grupo: grupo,
+        alumno: alumno,
+        onChanged: () {
+          _fetchLibro(grupo.id);
+        },
+      ),
+    );
+  }
+
+  List<CalificacionesResumenAlumno> get _filteredRows {
+    if (_searchText.isEmpty) return _rows;
+    return _rows.where((row) {
+      return row.nombre.toLowerCase().contains(_searchText) ||
+          row.correo.toLowerCase().contains(_searchText);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryBlue = const Color(0xFF2D63ED);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Libro de calificaciones',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Captura final en tabla y abre cada alumno para registrar actividades o comentarios.',
+                style: TextStyle(color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: DropdownButtonFormField<int>(
+                        value: _selectedGrupo?.id,
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                        ),
+                        hint: const Text('Selecciona una clase'),
+                        items: _grupos.map((grupo) {
+                          return DropdownMenuItem<int>(
+                            value: grupo.id,
+                            child: Text('${grupo.nombre} - ${grupo.materia}'),
+                          );
+                        }).toList(),
+                        onChanged: (id) {
+                          if (id == null) return;
+                          final grupo = _grupos.firstWhere(
+                            (item) => item.id == id,
+                          );
+                          setState(() => _selectedGrupo = grupo);
+                          _fetchLibro(id);
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.search_rounded),
+                          hintText: 'Buscar alumno',
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(vertical: 16),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _InfoPill(
+                    icon: Icons.table_chart_rounded,
+                    label: '${_rows.length} alumnos',
+                  ),
+                  _InfoPill(
+                    icon: Icons.assignment_rounded,
+                    label: _selectedGrupo == null
+                        ? 'Sin clase seleccionada'
+                        : '${_selectedGrupo!.nombre} • ${_selectedGrupo!.materia}',
+                  ),
+                  const _InfoPill(
+                    icon: Icons.touch_app_rounded,
+                    label: 'Toca el nombre para actividades y comentarios',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: _loading
+                    ? Center(
+                        child: CircularProgressIndicator(color: primaryBlue),
+                      )
+                    : _selectedGrupo == null
+                    ? const _EmptyState(
+                        title: 'Selecciona una clase',
+                        subtitle:
+                            'Cuando elijas una materia aparecerá el libro tipo tabla para capturar y editar calificaciones.',
+                      )
+                    : _filteredRows.isEmpty
+                    ? const _EmptyState(
+                        title: 'No hay alumnos en esta clase',
+                        subtitle:
+                            'Agrega alumnos al grupo para empezar a capturar actividades y calificaciones.',
+                      )
+                    : _buildGradeTable(primaryBlue),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGradeTable(Color primaryBlue) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: SingleChildScrollView(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowColor: MaterialStateProperty.all(
+                const Color(0xFFF8FAFC),
+              ),
+              columnSpacing: 18,
+              dataRowMinHeight: 86,
+              dataRowMaxHeight: 86,
+              columns: const [
+                DataColumn(label: Text('Alumno')),
+                DataColumn(label: Text('Final')),
+                DataColumn(label: Text('Acciones')),
+                DataColumn(label: Text('Actividades')),
+                DataColumn(label: Text('Comentario reciente')),
+              ],
+              rows: _filteredRows.map((alumno) {
+                final isSaving = _savingRows[alumno.id] ?? false;
+                return DataRow(
+                  cells: [
+                    DataCell(
+                      SizedBox(
+                        width: 220,
+                        child: InkWell(
+                          onTap: () => _abrirDetalleAlumno(alumno),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                alumno.nombre,
+                                style: TextStyle(
+                                  color: primaryBlue,
+                                  fontWeight: FontWeight.w800,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                alumno.correo,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      SizedBox(
+                        width: 84,
+                        child: TextField(
+                          controller: _gradeControllers[alumno.id],
+                          textAlign: TextAlign.center,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: '0-10',
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 10,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => _llenarConDiez(alumno),
+                            child: const Text('10'),
+                          ),
+                          const SizedBox(width: 6),
+                          IconButton(
+                            tooltip: 'Guardar final',
+                            onPressed: isSaving
+                                ? null
+                                : () => _guardarCalificacionFinal(alumno),
+                            icon: isSaving
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.save_rounded),
+                          ),
+                          IconButton(
+                            tooltip: 'Abrir detalle',
+                            onPressed: () => _abrirDetalleAlumno(alumno),
+                            icon: const Icon(Icons.sticky_note_2_rounded),
+                          ),
+                        ],
+                      ),
+                    ),
+                    DataCell(
+                      SizedBox(
+                        width: 110,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '${alumno.totalActividades} registradas',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              alumno.promedioActividades != null
+                                  ? 'Prom. ${alumno.promedioActividades!.toStringAsFixed(1)}'
+                                  : 'Sin promedio',
+                              style: const TextStyle(
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      SizedBox(
+                        width: 260,
+                        child: Text(
+                          alumno.ultimoComentario.isEmpty
+                              ? 'Sin comentarios recientes'
+                              : alumno.ultimoComentario,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Color(0xFF475569)),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatEditableGrade(double? value) {
+    if (value == null) return '';
+    if (value % 1 == 0) return value.toStringAsFixed(0);
+    return value.toStringAsFixed(1);
+  }
+}
+
+class _AlumnoActividadSheet extends StatefulWidget {
+  final Grupo grupo;
+  final CalificacionesResumenAlumno alumno;
+  final VoidCallback onChanged;
+
+  const _AlumnoActividadSheet({
+    required this.grupo,
+    required this.alumno,
+    required this.onChanged,
+  });
+
+  @override
+  State<_AlumnoActividadSheet> createState() => _AlumnoActividadSheetState();
+}
+
+class _AlumnoActividadSheetState extends State<_AlumnoActividadSheet> {
+  final TextEditingController _tituloController = TextEditingController();
+  final TextEditingController _calificacionController = TextEditingController();
+  final TextEditingController _comentarioController = TextEditingController();
+
+  List<ActividadCalificacion> _actividades = [];
+  bool _loading = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarActividades();
+  }
+
+  @override
+  void dispose() {
+    _tituloController.dispose();
+    _calificacionController.dispose();
+    _comentarioController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _cargarActividades() async {
+    try {
+      final actividades = await ApiService.getActividadesCalificacion(
+        widget.alumno.id,
+        widget.grupo.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _actividades = actividades;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error cargando actividades: $e'),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
-  List<Alumno> get _filteredAlumnos {
-    if (_searchText.isEmpty) return _alumnos;
-    final q = _searchText.toLowerCase();
-    return _alumnos
-        .where(
-          (a) =>
-              a.nombre.toLowerCase().contains(q) ||
-              a.correo.toLowerCase().contains(q),
-        )
-        .toList();
-  }
+  Future<void> _guardarActividad() async {
+    final comentario = _comentarioController.text.trim();
+    final titulo = _tituloController.text.trim();
+    final gradeText = _calificacionController.text.trim();
+    final calificacion = gradeText.isEmpty ? null : double.tryParse(gradeText);
 
-  Widget _buildCalificacionControl(Alumno alumno) {
-    final bool editing = _isEditing[alumno.id] ?? false;
-    final String? calif = _calificaciones[alumno.id];
+    if (calificacion == null && gradeText.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La calificación debe ser un número')),
+      );
+      return;
+    }
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.white, const Color(0xFFE8D9FF).withOpacity(0.4)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    if (calificacion != null && (calificacion < 0 || calificacion > 10)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La calificación debe estar entre 0 y 10')),
+      );
+      return;
+    }
+
+    if (comentario.isEmpty && calificacion == null && titulo.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Agrega una actividad, una calificación o un comentario'),
         ),
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 3)),
-        ],
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 12,
+      );
+      return;
+    }
+
+    setState(() => _saving = true);
+
+    try {
+      await ApiService.guardarActividadCalificacion(
+        alumnoId: widget.alumno.id,
+        grupoId: widget.grupo.id,
+        titulo: titulo.isEmpty
+            ? (comentario.isNotEmpty ? 'Comentario' : 'Actividad')
+            : titulo,
+        calificacion: calificacion,
+        comentario: comentario,
+      );
+
+      _tituloController.clear();
+      _calificacionController.clear();
+      _comentarioController.clear();
+
+      await _cargarActividades();
+      widget.onChanged();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Actividad o comentario guardado'),
+          backgroundColor: Colors.green,
         ),
-
-        leading: const CircleAvatar(
-          radius: 26,
-          backgroundColor: Color(0xFFB388EB),
-          child: Icon(Icons.person, size: 30, color: Color(0xFF4B0082)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al guardar: $e'),
+          backgroundColor: Colors.red,
         ),
-
-        title: Text(
-          alumno.nombre,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-        ),
-
-        subtitle: Text(alumno.correo),
-
-        trailing: editing
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 60,
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFB388EB)),
-                    ),
-                    child: TextField(
-                      controller: _controllers[alumno.id],
-                      textAlign: TextAlign.center,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        hintText: '0',
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.check_circle,
-                      color: Colors.green,
-                      size: 28,
-                    ),
-                    onPressed: () {
-                      _guardarCalificacion(alumno);
-                      setState(() => _isEditing[alumno.id] = false);
-                    },
-                  ),
-                ],
-              )
-            :
-              // ====== PALETA MORADA APLICADA ======
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 6,
-                      horizontal: 14,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8D9FF),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      calif == null || calif.isEmpty ? "—" : calif.toString(),
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF4B0082),
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.edit,
-                      color: Color(0xFF6A0DAD),
-                      size: 26,
-                    ),
-                    onPressed: () {
-                      setState(() => _isEditing[alumno.id] = true);
-                    },
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red, size: 26),
-                    onPressed: () {
-                      setState(() {
-                        _controllers[alumno.id]?.text = '';
-                        _calificaciones[alumno.id] = null;
-                      });
-                    },
-                  ),
-                ],
-              ),
-      ),
-    );
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade200,
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // SELECTOR DE GRUPO
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 6,
-                    offset: Offset(0, 3),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.all(8),
-              child: DropdownButtonFormField<int>(
-                value: _selectedGrupoId,
-                decoration: const InputDecoration(border: InputBorder.none),
-                hint: const Text("Selecciona un grupo"),
-                items: _grupos.map((g) {
-                  return DropdownMenuItem(
-                    value: g.id,
-                    child: Text("${g.nombre} - ${g.materia}"),
-                  );
-                }).toList(),
-                onChanged: (id) {
-                  if (id != null) {
-                    setState(() => _selectedGrupoId = id);
-                    _fetchAlumnos(id);
-                  }
-                },
-              ),
+    final primaryBlue = const Color(0xFF2D63ED);
+
+    return FractionallySizedBox(
+      heightFactor: 0.92,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              12,
+              16,
+              16 + MediaQuery.of(context).viewInsets.bottom,
             ),
-
-            const SizedBox(height: 15),
-
-            // BARRA DE BÚSQUEDA
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 6,
-                    offset: Offset(0, 3),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 48,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.black12,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
                   ),
-                ],
-              ),
-              child: TextField(
-                controller: _searchController,
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search, color: Color(0xFF6A0DAD)),
-                  hintText: "Buscar alumno...",
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.all(16),
                 ),
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            // LISTA DE ALUMNOS
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _filteredAlumnos.isEmpty
-                  ? Center(
-                      child: Text(
-                        _selectedGrupoId == null
-                            ? "Selecciona un grupo primero"
-                            : "No hay alumnos en este grupo",
-                        style: const TextStyle(
-                          color: Colors.grey,
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.alumno.nombre,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${widget.grupo.nombre} • ${widget.grupo.materia}',
+                            style: const TextStyle(color: Color(0xFF64748B)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _InfoPill(
+                      icon: Icons.grade_rounded,
+                      label: widget.alumno.calificacionFinal != null
+                          ? 'Final ${widget.alumno.calificacionFinal!.toStringAsFixed(1)}'
+                          : 'Sin final',
+                    ),
+                    _InfoPill(
+                      icon: Icons.assignment_rounded,
+                      label: '${widget.alumno.totalActividades} actividades previas',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Nueva actividad o comentario',
+                        style: TextStyle(
                           fontSize: 16,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                    )
-                  : ListView.builder(
-                      itemCount: _filteredAlumnos.length,
-                      itemBuilder: (_, i) {
-                        final alumno = _filteredAlumnos[i];
-                        return _buildCalificacionControl(alumno);
-                      },
-                    ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _tituloController,
+                        decoration: const InputDecoration(
+                          labelText: 'Actividad',
+                          hintText: 'Ej. Tarea 2, exposición, seguimiento',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _calificacionController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              decoration: const InputDecoration(
+                                labelText: 'Calificación',
+                                hintText: '0 - 10',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          OutlinedButton(
+                            onPressed: () {
+                              _calificacionController.text = '10';
+                            },
+                            child: const Text('Poner 10'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _comentarioController,
+                        minLines: 3,
+                        maxLines: 5,
+                        decoration: const InputDecoration(
+                          labelText: 'Reporte o comentario',
+                          hintText:
+                              'Ej. Participó muy bien, entregar evidencia pendiente, necesita reforzar tema 3.',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: _saving
+                                  ? null
+                                  : () => Navigator.pop(context),
+                              child: const Text('Cerrar'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _saving ? null : _guardarActividad,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: primaryBlue,
+                                foregroundColor: Colors.white,
+                              ),
+                              icon: _saving
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(Icons.save_rounded),
+                              label: Text(
+                                _saving ? 'Guardando...' : 'Guardar',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Historial',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: _loading
+                      ? Center(
+                          child: CircularProgressIndicator(color: primaryBlue),
+                        )
+                      : _actividades.isEmpty
+                      ? const _EmptyState(
+                          title: 'Sin movimientos todavía',
+                          subtitle:
+                              'Aquí aparecerán las actividades, calificaciones extra y comentarios registrados para este alumno.',
+                        )
+                      : ListView.separated(
+                          itemCount: _actividades.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (_, index) {
+                            final actividad = _actividades[index];
+                            return Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          actividad.titulo,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                      ),
+                                      if (actividad.calificacion != null)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFDBEAFE),
+                                            borderRadius:
+                                                BorderRadius.circular(999),
+                                          ),
+                                          child: Text(
+                                            actividad.calificacion!
+                                                .toStringAsFixed(1),
+                                            style: const TextStyle(
+                                              color: Color(0xFF1D4ED8),
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    _formatDate(actividad.fecha),
+                                    style: const TextStyle(
+                                      color: Color(0xFF64748B),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  if (actividad.comentario.isNotEmpty) ...[
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      actividad.comentario,
+                                      style: const TextStyle(height: 1.4),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(String rawDate) {
+    final parsed = DateTime.tryParse(rawDate);
+    if (parsed == null) return rawDate;
+    final month = parsed.month.toString().padLeft(2, '0');
+    final day = parsed.day.toString().padLeft(2, '0');
+    final hour = parsed.hour.toString().padLeft(2, '0');
+    final minute = parsed.minute.toString().padLeft(2, '0');
+    return '$day/$month/${parsed.year} • $hour:$minute';
+  }
+}
+
+class _InfoPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _InfoPill({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: const Color(0xFF2D63ED)),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final String title;
+  final String subtitle;
+
+  const _EmptyState({required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.assignment_outlined,
+              size: 44,
+              color: Color(0xFF94A3B8),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Color(0xFF64748B), height: 1.5),
             ),
           ],
         ),
