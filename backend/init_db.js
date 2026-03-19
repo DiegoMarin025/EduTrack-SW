@@ -4,7 +4,7 @@ const mysql = require('mysql2');
 const connection = mysql.createConnection({
   host: 'localhost',
   user: 'root',
-  password: 'Saul2006'
+  password: 'MYSQLDIEGO'
 });
 
 // Crear la base de datos si no existe
@@ -16,7 +16,7 @@ connection.query(`CREATE DATABASE IF NOT EXISTS edutrack`, (err) => {
   const db = mysql.createConnection({
     host: 'localhost',
     user: 'root',
-    password: 'Saul2006',
+    password: 'MYSQLDIEGO',
     database: 'edutrack'
   });
 

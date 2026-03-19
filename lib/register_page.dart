@@ -14,8 +14,10 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
-  final TextEditingController _matriculaHijoController = TextEditingController(); // Agregado para el Tutor
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+  final TextEditingController _matriculaHijoController =
+      TextEditingController(); // Agregado para el Tutor
 
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -31,14 +33,15 @@ class _RegisterPageState extends State<RegisterPage> {
       try {
         final response = await http.post(
           // Mantengo tu endpoint, tu compañero de DB lo gestionará luego
-          Uri.parse('http://localhost:3000/register'), 
+          Uri.parse('http://localhost:3000/register'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'nombre': _nombreController.text,
             'email': _emailController.text,
             'password': _passwordController.text,
             'rol': 'tutor', // Forzamos el rol a tutor para tu rama
-            'matricula_hijo': _matriculaHijoController.text, // Campo obligatorio para el tutor
+            'matricula_hijo': _matriculaHijoController
+                .text, // Campo obligatorio para el tutor
           }),
         );
 
@@ -47,7 +50,10 @@ class _RegisterPageState extends State<RegisterPage> {
           Navigator.pop(context);
         } else {
           final errorData = jsonDecode(response.body);
-          _showSnackBar(errorData['message'] ?? 'Error al registrar', Colors.red);
+          _showSnackBar(
+            errorData['message'] ?? 'Error al registrar',
+            Colors.red,
+          );
         }
       } catch (e) {
         _showSnackBar('Error de conexión con el servidor', Colors.red);
@@ -75,8 +81,10 @@ class _RegisterPageState extends State<RegisterPage> {
       // Mantenemos tu diseño de fondo y colores
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: Text('Registro de Tutor', 
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text(
+          'Registro de Tutor',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.blue[900],
         elevation: 0,
         iconTheme: IconThemeData(color: Colors.white),
@@ -95,7 +103,9 @@ class _RegisterPageState extends State<RegisterPage> {
               padding: const EdgeInsets.all(24.0),
               child: Card(
                 elevation: 8,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(32.0),
                   child: Form(
@@ -103,7 +113,11 @@ class _RegisterPageState extends State<RegisterPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.family_restroom, size: 80, color: Colors.blue[900]), // Cambiado a ícono de familia
+                        Icon(
+                          Icons.family_restroom,
+                          size: 80,
+                          color: Colors.blue[900],
+                        ), // Cambiado a ícono de familia
                         SizedBox(height: 16),
                         Text(
                           'Bienvenido Tutor',
@@ -126,7 +140,8 @@ class _RegisterPageState extends State<RegisterPage> {
                           controller: _nombreController,
                           label: 'Nombre Completo',
                           icon: Icons.person_outline,
-                          validator: (value) => value!.isEmpty ? 'Ingresa tu nombre' : null,
+                          validator: (value) =>
+                              value!.isEmpty ? 'Ingresa tu nombre' : null,
                         ),
                         SizedBox(height: 20),
 
@@ -137,8 +152,10 @@ class _RegisterPageState extends State<RegisterPage> {
                           icon: Icons.email_outlined,
                           keyboardType: TextInputType.emailAddress,
                           validator: (value) {
-                            if (value == null || value.isEmpty) return 'Ingresa un correo';
-                            if (!value.contains('@')) return 'Ingresa un correo válido';
+                            if (value == null || value.isEmpty)
+                              return 'Ingresa un correo';
+                            if (!value.contains('@'))
+                              return 'Ingresa un correo válido';
                             return null;
                           },
                         ),
@@ -151,7 +168,8 @@ class _RegisterPageState extends State<RegisterPage> {
                           icon: Icons.badge_outlined,
                           hint: 'Ej. 202300456',
                           validator: (value) {
-                            if (value == null || value.isEmpty) return 'La matrícula es obligatoria';
+                            if (value == null || value.isEmpty)
+                              return 'La matrícula es obligatoria';
                             return null;
                           },
                         ),
@@ -162,8 +180,11 @@ class _RegisterPageState extends State<RegisterPage> {
                           controller: _passwordController,
                           label: 'Contraseña',
                           obscure: _obscurePassword,
-                          onToggle: () => setState(() => _obscurePassword = !_obscurePassword),
-                          validator: (value) => value!.length < 6 ? 'Mínimo 6 caracteres' : null,
+                          onToggle: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
+                          validator: (value) =>
+                              value!.length < 6 ? 'Mínimo 6 caracteres' : null,
                         ),
                         SizedBox(height: 20),
 
@@ -172,9 +193,13 @@ class _RegisterPageState extends State<RegisterPage> {
                           controller: _confirmPasswordController,
                           label: 'Confirmar Contraseña',
                           obscure: _obscureConfirmPassword,
-                          onToggle: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                          onToggle: () => setState(
+                            () => _obscureConfirmPassword =
+                                !_obscureConfirmPassword,
+                          ),
                           validator: (value) {
-                            if (value != _passwordController.text) return 'Las contraseñas no coinciden';
+                            if (value != _passwordController.text)
+                              return 'Las contraseñas no coinciden';
                             return null;
                           },
                         ),
@@ -198,7 +223,10 @@ class _RegisterPageState extends State<RegisterPage> {
                                   ),
                                   child: Text(
                                     'REGISTRAR TUTOR',
-                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -214,7 +242,6 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  // Helpers para mantener tu código limpio y largo como el original
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -260,7 +287,10 @@ class _RegisterPageState extends State<RegisterPage> {
         labelText: label,
         prefixIcon: Icon(Icons.lock_outline, color: Colors.blue[900]),
         suffixIcon: IconButton(
-          icon: Icon(obscure ? Icons.visibility_off : Icons.visibility, color: Colors.blue[900]),
+          icon: Icon(
+            obscure ? Icons.visibility_off : Icons.visibility,
+            color: Colors.blue[900],
+          ),
           onPressed: onToggle,
         ),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),

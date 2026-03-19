@@ -5,9 +5,6 @@ import 'detalle_grupo_screen.dart';
 import 'dialog_crear_clase.dart';
 import 'materia_home_screen.dart';
 
-// ===============================
-// MIS GRUPOS (REDISEÑO PRIMARIA)
-// ===============================
 class MisGruposScreen extends StatefulWidget {
   const MisGruposScreen({super.key});
 
@@ -134,7 +131,6 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
                 ),
                 child: ListView(
                   children: [
-                    // Encabezado “humano” para que no se sienta vacío
                     Text(
                       "Tu salón y tus materias",
                       style: TextStyle(
@@ -153,8 +149,6 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
                       ),
                     ),
                     const SizedBox(height: 14),
-
-                    // Si está vacío: onboarding (no se ve “pantalla IA”)
                     if (bundles.isEmpty) ...[
                       _OnboardingEmpty(
                         primaryBlue: primaryBlue,
@@ -170,7 +164,6 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
                         textDark: textDark,
                       ),
                     ] else ...[
-                      // “Hoy” (por ahora es visual; luego lo conectamos a asistencia)
                       _TodayCard(
                         primaryBlue: primaryBlue,
                         border: border,
@@ -179,7 +172,6 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
                       ),
                       const SizedBox(height: 14),
 
-                      // Lista de “Mi salón”
                       Text(
                         "Mis grupos",
                         style: TextStyle(
@@ -654,7 +646,7 @@ class _GroupCard extends StatelessWidget {
 class _GrupoBundle {
   final int grupoIdReal;
   final String nombreGrupo;
-  final List<Grupo> items; // cada item es una materia (clase)
+  final List<Grupo> items;
 
   _GrupoBundle({
     required this.grupoIdReal,
@@ -662,5 +654,3 @@ class _GrupoBundle {
     required this.items,
   });
 }
-
-

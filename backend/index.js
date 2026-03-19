@@ -57,7 +57,7 @@ app.get('/grupos', (req, res) => {
     });
 });
 
-// ✅ 1B) OBTENER MIS GRUPOS AGRUPADOS (UN GRUPO, MUCHAS MATERIAS)
+// 1B) OBTENER MIS GRUPOS AGRUPADOS (UN GRUPO, MUCHAS MATERIAS)
 app.get('/mis_grupos', (req, res) => {
   const { profesor_id } = req.query;
 
