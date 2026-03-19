@@ -110,6 +110,27 @@ app.get('/mis_grupos', (req, res) => {
   });
 });
 
+// 2. OBTENER ALUMNOS POR CLASE
+// Recibe clase_id = materias_grupos.id y resuelve el grupo físico asociado.
+app.get('/grupos/:clase_id/alumnos', (req, res) => {
+    const { clase_id } = req.params;
+
+    const sql = `
+        SELECT DISTINCT u.id, u.nombre, u.email AS correo
+        FROM materias_grupos mg
+        JOIN alumnos_grupos ag ON ag.grupo_id = mg.grupo_id
+        JOIN usuarios u ON u.id = ag.alumno_id
+        WHERE mg.id = ?
+          AND u.rol = 'alumno'
+        ORDER BY u.nombre ASC
+    `;
+
+    db.query(sql, [clase_id], (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(results);
+    });
+});
+
 // 3. OBTENER CALIFICACIONES
 app.get('/calificaciones', (req, res) => {
     const { alumno_id, grupo_id } = req.query; 
