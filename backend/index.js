@@ -28,7 +28,7 @@ function crearNotificacion(uid, titulo, mensaje) {
     const sql = 'INSERT INTO notificaciones (usuario_id, titulo, mensaje, fecha) VALUES (?, ?, ?, NOW())';
     db.query(sql, [uid, titulo, mensaje], (err) => {
         if (err) console.error("Error creando notificación:", err);
-        else console.log(`🔔 Notificación enviada al usuario ${uid}: ${titulo}`);
+        else console.log(`Notificación enviada al usuario ${uid}: ${titulo}`);
     });
 }
 

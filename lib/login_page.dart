@@ -185,7 +185,11 @@ class _LoginPageState extends State<LoginPage>
                   Center(
                     child: Image.asset(
                       'lib/image/login.png',
+<<<<<<< Updated upstream
                       width: 350,
+=======
+                      width: 400,
+>>>>>>> Stashed changes
                       fit: BoxFit.contain,
                     ),
                   ),
@@ -221,7 +225,11 @@ class _LoginPageState extends State<LoginPage>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+<<<<<<< Updated upstream
           Image.asset('lib/image/logotipo.png', height: 200),
+=======
+          Image.asset('lib/image/logotipo.png', height: 250),
+>>>>>>> Stashed changes
           const SizedBox(height: 25),
           const Text(
             "Iniciar Sesión",
