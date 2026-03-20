@@ -1,152 +1,261 @@
 import 'package:flutter/material.dart';
+import 'tutor_grades_screen.dart';
 
 class TutorDashboard extends StatefulWidget {
   final int userId;
-  const TutorDashboard({super.key, required this.userId});
+  final String username;
+
+  const TutorDashboard({super.key, required this.userId, required this.username});
+
   @override
   _TutorDashboardState createState() => _TutorDashboardState();
 }
 
 class _TutorDashboardState extends State<TutorDashboard> {
-  // Datos temporales (Placeholders) mientras tu compañero termina la DB
-  final String nombreHijo = "Diego Alejandro Marín"; 
+  final String nombreHijo = "Diego Alejandro Marín";
+  final String grupoHijo = "TI-51";
   final double promedioGeneral = 9.2;
   final int totalAsistencias = 45;
-  final int totalFaltas = 3;
-  final int actividadesPendientes = 5;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        title: Text('Panel del Tutor', style: TextStyle(color: Colors.white)),
-        backgroundColor: Colors.blue[900],
-        actions: [
-          IconButton(
-            icon: Icon(Icons.notifications_none, color: Colors.white),
-            onPressed: () {},
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(16.0),
+    return Container(
+      color: const Color(0xFFF5F7FA), // Fondo gris claro de la imagen
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(30.0), // Más padding general
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Sección: Información del Hijo
-            _buildChildInfoCard(),
-            SizedBox(height: 20),
-
-            // Sección: Resumen Académico (Promedio y Asistencia)
-            Text(
-              "Resumen Académico",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue[900]),
-            ),
-            SizedBox(height: 10),
+            // --- SECCIÓN GENERAL (Sin Scaffold ni AppBar) ---
+            _buildTopHeader(),
+            const SizedBox(height: 25),
+            _buildMainBlueCard(),
+            const SizedBox(height: 25),
+            
+            // Stats (Se mantienen grandes)
             Row(
               children: [
-                Expanded(child: _buildStatCard("Promedio", promedioGeneral.toString(), Icons.star, Colors.orange)),
-                SizedBox(width: 10),
-                Expanded(child: _buildStatCard("Asistencias", "$totalAsistencias", Icons.check_circle, Colors.green)),
+                Expanded(child: _buildMiniStatCard("Promedio", "$promedioGeneral", Icons.star_border, Colors.blue)),
+                const SizedBox(width: 20),
+                Expanded(child: _buildMiniStatCard("Asistencias", "$totalAsistencias", Icons.people_outline, Colors.green)),
               ],
             ),
-            SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(child: _buildStatCard("Faltas", "$totalFaltas", Icons.cancel, Colors.red)),
-                SizedBox(width: 10),
-                Expanded(child: _buildStatCard("Actividades", "$actividadesPendientes", Icons.assignment, Colors.blue)),
-              ],
-            ),
-            SizedBox(height: 25),
+            const SizedBox(height: 40),
 
-            // Sección: Acciones Rápidas
-            Text(
-              "Detalles y Seguimiento",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue[900]),
+            const Text(
+              "Acciones rápidas",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A337E)),
             ),
-            SizedBox(height: 15),
-            _buildMenuOption("Ver Calificaciones Detalladas", Icons.list_alt, Colors.blue[800]!),
-            _buildMenuOption("Historial de Asistencias", Icons.calendar_today, Colors.blue[700]!),
-            _buildMenuOption("Justificar Faltas", Icons.upload_file, Colors.blue[600]!),
-            _buildMenuOption("Información del Maestro", Icons.person_search, Colors.blue[500]!),
+            const SizedBox(height: 20),
+            
+            // --- GRID DE ACCIONES RÁPIDAS (Corregido: 4 grandes en fila) ---
+            GridView.count(
+              crossAxisCount: 4, // 4 columnas
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 20,
+              crossAxisSpacing: 20,
+              // Relación Ancho/Alto para Web (Mayor para que no se estiren hacia abajo)
+              childAspectRatio: 1.4, 
+              children: [
+                _buildActionCard(
+                  "Asistencia", 
+                  "Pase de lista", 
+                  Icons.person_add_alt_1, 
+                  Colors.blue,
+                  onTap: () => print("Asistencia"),
+                ),
+                _buildActionCard(
+                  "Calificaciones", 
+                  "Evaluar rápido", 
+                  Icons.star_outline, 
+                  Colors.orange,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const TutorGradesScreen()),
+                    );
+                  },
+                ),
+                _buildActionCard(
+                  "Mis grupos", 
+                  "Alumnos y listas", 
+                  Icons.assignment_outlined, 
+                  Colors.green,
+                  onTap: () => print("Grupos"),
+                ),
+                _buildActionCard(
+                  "Reportes", 
+                  "Resumen semanal", 
+                  Icons.bar_chart, 
+                  Colors.purple,
+                  onTap: () => print("Reportes"),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 
-  // Widget para la tarjeta principal del alumno
-  Widget _buildChildInfoCard() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: Padding(
-        padding: EdgeInsets.all(20),
-        child: Row(
+  // --- COMPONENTES DE DISEÑO ---
+
+  Widget _buildTopHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
           children: [
             CircleAvatar(
-              radius: 35,
-              backgroundColor: Colors.blue[900],
-              child: Icon(Icons.person, size: 40, color: Colors.white),
+              backgroundColor: Colors.blue.shade50,
+              radius: 26,
+              child: const Icon(Icons.school, color: Color(0xFF1A337E), size: 26),
             ),
-            SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Tutor de:", style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                  Text(
-                    nombreHijo,
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  Text("Grupo: TI-51", style: TextStyle(color: Colors.blue[900])),
-                ],
+            const SizedBox(width: 15),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "¡Hola, ${widget.username.toLowerCase()}!",
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF1A337E)),
+                ),
+                const Text("Bienvenido a tu panel de control", style: TextStyle(color: Colors.grey, fontSize: 14)),
+              ],
+            ),
+          ],
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.calendar_today, size: 16, color: Color(0xFF1A337E)),
+              SizedBox(width: 10),
+              Text("Vie 20 Mar", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMainBlueCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF2855D1), Color(0xFF1A337E)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
+            child: const Icon(Icons.menu_book, color: Colors.white, size: 30),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Resumen del alumno", style: TextStyle(color: Colors.white70, fontSize: 13)),
+                Text(nombreHijo, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                Text("Grupo $grupoHijo", style: const TextStyle(color: Colors.white70, fontSize: 14)),
+              ],
+            ),
+          ),
+          const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 18),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniStatCard(String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.grey.shade100),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(width: 18),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // MÉTODO ACTUALIZADO: CAJAS GRANDES Y LEGIBLES
+  // ------------------------------------------------------------------
+  Widget _buildActionCard(String title, String subtitle, IconData icon, Color color, {VoidCallback? onTap}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          // --- AUMENTAMOS PADDING INTERNO ---
+          padding: const EdgeInsets.all(24), 
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.grey.shade100),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, // Alineación a la izquierda
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(15)),
+                // --- AUMENTAMOS TAMAÑO DEL ICONO ---
+                child: Icon(icon, color: color, size: 30), 
               ),
-            ),
-          ],
+              const SizedBox(height: 15),
+              // --- AUMENTAMOS TAMAÑO DE FUENTE ---
+              Text(
+                title, 
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF1A337E)),
+              ),
+              const SizedBox(height: 4),
+              // --- AUMENTAMOS TAMAÑO DE SUBTÍTULO ---
+              Text(
+                subtitle, 
+                style: const TextStyle(color: Colors.grey, fontSize: 13),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
-  }
-
-  // Widget para las tarjetas de estadísticas (Promedio, Asistencias, etc)
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 30),
-            SizedBox(height: 8),
-            Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            Text(title, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Widget para los botones de menú
-  Widget _buildMenuOption(String title, IconData icon, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        leading: Container(
-          padding: EdgeInsets.all(8),
-          decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-          child: Icon(icon, color: color),
-        ),
-        title: Text(title, style: TextStyle(fontWeight: FontWeight.w600)),
-        trailing: Icon(Icons.arrow_forward_ios, size: 16),
-        onTap: () {
-          // Aquí navegaremos a las sub-vistas en los siguientes pasos
-        },
-        tileColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }

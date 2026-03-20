@@ -3,7 +3,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import 'detalle_grupo_screen.dart';
 import 'dialog_crear_clase.dart';
-import 'materia_home_screen.dart';
 
 // ===============================
 // MIS GRUPOS (REDISEÑO PRIMARIA)
@@ -273,7 +272,7 @@ class _OnboardingEmpty extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: primaryBlue.withOpacity(0.10),
+                  color: primaryBlue.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(Icons.school_rounded, color: primaryBlue),
@@ -392,7 +391,7 @@ class _TodayCard extends StatelessWidget {
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color: primaryBlue.withOpacity(0.10),
+              color: primaryBlue.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(Icons.today_rounded, color: primaryBlue),
@@ -492,7 +491,7 @@ class _GroupCard extends StatelessWidget {
                     width: 46,
                     height: 46,
                     decoration: BoxDecoration(
-                      color: primaryBlue.withOpacity(0.10),
+                      color: primaryBlue.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Icon(Icons.groups_rounded, color: primaryBlue),

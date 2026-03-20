@@ -93,10 +93,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
     // Colores dinámicos
     final Color backgroundColor = esAlerta
-        ? Colors.red.shade50.withOpacity(0.9)
+        ? Colors.red.shade50.withValues(alpha: 0.9)
         : (notif.leida
-              ? Colors.white.withOpacity(0.7)
-              : Colors.white.withOpacity(0.95));
+              ? Colors.white.withValues(alpha: 0.7)
+              : Colors.white.withValues(alpha: 0.95));
 
     final Color iconColor = esAlerta ? Colors.red : Colors.deepPurple;
     final IconData iconData = esAlerta
@@ -121,7 +121,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                   : null),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 5,
             offset: const Offset(0, 2),
           ),

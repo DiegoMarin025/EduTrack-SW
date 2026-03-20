@@ -306,7 +306,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
           width: 46,
           height: 46,
           decoration: BoxDecoration(
-            color: primaryBlue.withOpacity(0.10),
+            color: primaryBlue.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Icon(Icons.school_rounded, color: primaryBlue, size: 26),
@@ -394,7 +394,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: primaryBlue.withOpacity(0.18),
+            color: primaryBlue.withValues(alpha: 0.18),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -407,7 +407,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
+                color: Colors.white.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Icon(
@@ -509,7 +509,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -521,7 +521,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: tint.withOpacity(0.10),
+              color: tint.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(icon, color: tint, size: 24),
@@ -618,7 +618,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
           border: Border.all(color: const Color(0xFFE2E8F0)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.03),
+              color: Colors.black.withValues(alpha: 0.03),
               blurRadius: 12,
               offset: const Offset(0, 6),
             ),
@@ -631,7 +631,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: item.tint.withOpacity(0.10),
+                color: item.tint.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Icon(item.icon, color: item.tint, size: 24),
@@ -706,7 +706,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
           border: Border.all(color: const Color(0xFFE2E8F0)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.03),
+              color: Colors.black.withValues(alpha: 0.03),
               blurRadius: 12,
               offset: const Offset(0, 6),
             ),
@@ -718,7 +718,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                color: badgeColor.withOpacity(0.10),
+                color: badgeColor.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Icon(icon, color: badgeColor, size: 24),
@@ -734,7 +734,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: badgeColor.withOpacity(0.12),
+                      color: badgeColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
@@ -802,9 +802,9 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.14),
+          color: Colors.white.withValues(alpha: 0.14),
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: Colors.white.withOpacity(0.20)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

@@ -18,7 +18,7 @@ class EduTrackApp extends StatelessWidget {
         useMaterial3: true,
       ),
       // Asegúrate de que LoginPage() no pida parámetros que no le pases
-      home: const LoginPage(),
+      home: LoginPage(),
     );
   }
 }

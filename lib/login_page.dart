@@ -1,341 +1,233 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'services/api_service.dart';
-import 'register_page.dart';
+
+// --- IMPORTS DE TUS PANTALLAS ---
 import 'main_layout.dart';
-import 'pantallasmaestros/main_layout_maestros_screen.dart';
+import 'register_page.dart';
+// Según tu explorador, esta es la ruta exacta desde lib/
+import 'pantallasmaestros/main_layout_maestros_screen.dart'; 
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
-
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  _LoginPageState createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage>
-    with SingleTickerProviderStateMixin {
-  final TextEditingController emailController = TextEditingController();
-  final TextEditingController passwordController = TextEditingController();
+class _LoginPageState extends State<LoginPage> {
+  final _formKey = GlobalKey<FormState>();
+  
+  // Controladores de texto
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
   bool _isLoading = false;
   bool _obscurePassword = true;
-  bool _isHovering = false;
 
-  late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
+  // LÓGICA DE LOGIN
+  Future<void> _login() async {
+    if (_formKey.currentState!.validate()) {
+      setState(() => _isLoading = true);
 
-  @override
-  void initState() {
-    super.initState();
-
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
-
-    _fadeAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInOut,
-    );
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.1),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    emailController.dispose();
-    passwordController.dispose();
-    super.dispose();
-  }
-
-  void login() async {
-    if (emailController.text.isEmpty || passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Por favor completa todos los campos")),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      final usuario = await ApiService.loginUser(
-        emailController.text.trim(),
-        passwordController.text.trim(),
-      );
-
-      final String rolReal = (usuario['rol'] ?? 'alumno')
-          .toString()
-          .toLowerCase();
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('saved_username', emailController.text.trim());
-      await prefs.setString('saved_password', passwordController.text.trim());
-      await prefs.setString('saved_userType', rolReal);
-
-      int userId = usuario['id'];
-      await prefs.setInt('saved_id', userId);
-      await prefs.setString('saved_name', usuario['nombre']);
-
-      if (mounted) {
-        _navegarAlHome(usuario, rolReal);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Colors.red,
-          ),
+      try {
+        final response = await http.post(
+          Uri.parse('http://localhost:3000/login'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'correo': _emailController.text.trim(),
+            'contrasena': _passwordController.text.trim(),
+          }),
         );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final usuario = data['usuario'];
+
+          final String rolEnBD = usuario['rol']; 
+          final int userId = usuario['id'];
+          final String nombreUsuario = usuario['nombre'];
+
+          // Guardamos sesión local
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt('userId', userId);
+          await prefs.setString('rol', rolEnBD);
+
+          if (rolEnBD == 'alumno' || rolEnBD == 'tutor') {
+            // REDIRECCIÓN A TUTORES
+            // Pasamos userId y username para que no marque error en MainLayout
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => MainLayout(
+                  usuarioId: userId, 
+                  username: nombreUsuario,
+                ),
+              ),
+            );
+          } else if (rolEnBD == 'profesor') {
+            // REDIRECCIÓN A MAESTROS
+            _showSnackBar('¡Bienvenido Profesor $nombreUsuario!', Colors.blue);
+
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const MainLayoutMaestros(),
+              ),
+            );
+          }
+        } else {
+          _showSnackBar('Credenciales incorrectas (Revisa la BD)', Colors.red);
+        }
+      } catch (e) {
+        _showSnackBar('Error de conexión: Verifica tu servidor', Colors.orange);
+      } finally {
+        setState(() => _isLoading = false);
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _navegarAlHome(Map<String, dynamic> usuario, String rol) {
-    final rawName = usuario['nombre'] ?? 'Usuario';
-    final displayName = rawName.toString().split(' ')[0];
-    final int userId = usuario['id'];
-
-    if (rol == "profesor" || rol == "maestro") {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const MainLayoutMaestros()),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              MainLayout(username: displayName, usuarioId: userId),
-        ),
-      );
-    }
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isWeb = MediaQuery.of(context).size.width > 800;
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: SlideTransition(
-          position: _slideAnimation,
-          child: isWeb ? _buildWebLayout() : _buildMobileLayout(),
+      body: Container(
+        height: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.blue[900]!, Colors.blue[600]!],
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildMobileLayout() {
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: _buildLoginCard(),
-      ),
-    );
-  }
-
-  Widget _buildWebLayout() {
-    return Row(
-      children: [
-        /// 🔵 LADO IZQUIERDO
-        Expanded(
-          flex: 5,
-          child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
+        child: Center(
+          child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 80),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Bienvenido a EduTrack",
-                    style: TextStyle(
-                      fontSize: 40,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    "Gestión académica inteligente\npara maestros y padres",
-                    style: TextStyle(fontSize: 20, color: Colors.white70),
-                  ),
-                  const SizedBox(height: 50),
-
-                  Center(
-                    child: Image.asset(
-                      'lib/image/login.png',
-                      width: 350,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ],
-              ),
+              padding: const EdgeInsets.all(32.0),
+              child: _buildLoginCard(),
             ),
           ),
         ),
-
-        /// LADO DERECHO
-        Expanded(
-          flex: 4,
-          child: Center(child: SizedBox(width: 420, child: _buildLoginCard())),
-        ),
-      ],
+      ),
     );
   }
 
   Widget _buildLoginCard() {
-    return Container(
-      padding: const EdgeInsets.all(35),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 30,
-            offset: const Offset(0, 15),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset('lib/image/logotipo.png', height: 200),
-          const SizedBox(height: 25),
-          const Text(
-            "Iniciar Sesión",
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E3A8A),
-            ),
-          ),
-          const SizedBox(height: 30),
-          _modernTextField(
-            controller: emailController,
-            hint: "Correo electrónico",
-            icon: Icons.email_outlined,
-          ),
-          const SizedBox(height: 20),
-          _modernTextField(
-            controller: passwordController,
-            hint: "Contraseña",
-            icon: Icons.lock_outline,
-            isPassword: true,
-          ),
-          const SizedBox(height: 30),
-          _modernButton(),
-          const SizedBox(height: 15),
-          TextButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => RegisterPage()),
-              );
-            },
-            child: const Text(
-              "¿No tienes cuenta? Regístrate",
-              style: TextStyle(color: Color(0xFF1E3A8A)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _modernTextField({
-    required TextEditingController controller,
-    required String hint,
-    required IconData icon,
-    bool isPassword = false,
-  }) {
-    return TextField(
-      controller: controller,
-      obscureText: isPassword ? _obscurePassword : false,
-      decoration: InputDecoration(
-        hintText: hint,
-        prefixIcon: Icon(icon),
-        suffixIcon: isPassword
-            ? IconButton(
-                icon: Icon(
-                  _obscurePassword
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
+    return Card(
+      elevation: 10,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.lock_outline, size: 80, color: Colors.blue[900]),
+              SizedBox(height: 16),
+              Text(
+                'EduTrack',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue[900],
                 ),
-                onPressed: () {
-                  setState(() {
-                    _obscurePassword = !_obscurePassword;
-                  });
-                },
-              )
-            : null,
-        filled: true,
-        fillColor: const Color(0xFFF1F5F9),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide.none,
+              ),
+              SizedBox(height: 32),
+              
+              _buildTextField(
+                controller: _emailController,
+                label: 'Correo Electrónico',
+                icon: Icons.email_outlined,
+              ),
+              SizedBox(height: 20),
+              
+              _buildTextField(
+                controller: _passwordController,
+                label: 'Contraseña',
+                icon: Icons.lock_outline,
+                isPassword: true,
+              ),
+              SizedBox(height: 32),
+
+              _isLoading ? CircularProgressIndicator() : _modernButton(),
+
+              SizedBox(height: 20),
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => RegisterPage()),
+                ),
+                child: Text(
+                  '¿No tienes cuenta? Regístrate',
+                  style: TextStyle(
+                    color: Colors.blue[900],
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _modernButton() {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovering = true),
-      onExit: (_) => setState(() => _isHovering = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: double.infinity,
-        height: 55,
-        child: ElevatedButton(
-          onPressed: _isLoading ? null : login,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _isHovering
-                ? const Color(0xFF1E40AF)
-                : const Color(0xFF2563EB),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-            elevation: 8,
-          ),
-          child: _isLoading
-              ? const SizedBox(
-                  height: 22,
-                  width: 22,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
-              : const Text(
-                  "Ingresar",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool isPassword = false,
+  }) {
+    return TextFormField(
+      controller: controller,
+      obscureText: isPassword ? _obscurePassword : false,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: Colors.blue[900]),
+        suffixIcon: isPassword
+            ? IconButton(
+                icon: Icon(
+                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
                 ),
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
+              )
+            : null,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        filled: true,
+        fillColor: Colors.grey[50],
+      ),
+      validator: (value) => value!.isEmpty ? 'Campo requerido' : null,
+    );
+  }
+
+  Widget _modernButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 55,
+      child: ElevatedButton(
+        onPressed: _login,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.blue[900],
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+          elevation: 5,
+        ),
+        child: Text(
+          'INICIAR SESIÓN',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
       ),
     );

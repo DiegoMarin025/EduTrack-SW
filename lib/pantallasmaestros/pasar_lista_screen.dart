@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../services/api_service.dart'; // usa tus modelos Alumno/Grupo
+import 'package:intl/intl.dart';
 
 /// ESTADOS DE ASISTENCIA
 enum EstadoAsistencia { presente, ausente, retardo }
@@ -343,8 +343,8 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
                             Row(
                               children: [
                                 CircleAvatar(
-                                  backgroundColor: primaryBlue.withOpacity(
-                                    0.12,
+                                  backgroundColor: primaryBlue.withValues(
+                                  alpha: 0.12,
                                   ),
                                   foregroundColor: primaryBlue,
                                   child: Text(

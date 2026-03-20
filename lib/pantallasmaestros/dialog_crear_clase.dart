@@ -65,7 +65,7 @@ class _DialogCrearClaseState extends State<DialogCrearClase> {
         mainAxisSize: MainAxisSize.min,
         children: [
           DropdownButtonFormField<int>(
-            value: _selectedGrupoId,
+            initialValue: _selectedGrupoId,
             hint: const Text("Selecciona el grupo"),
             items: _gruposDisponibles
                 .map(

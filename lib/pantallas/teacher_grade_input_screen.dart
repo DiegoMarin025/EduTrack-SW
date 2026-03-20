@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:math';
 
 // -----------------------------------------------------------------
 // 1. MODELOS DE DATOS
@@ -291,7 +290,7 @@ class _TeacherGradeInputScreenState extends State<TeacherGradeInputScreen> {
         fillColor: Colors.grey.shade50,
         filled: true,
       ),
-      value: _materiaSeleccionada,
+      initialValue: _materiaSeleccionada,
       hint: const Text('Seleccione una materia'),
       items: _mockMaterias.map((String materia) {
         return DropdownMenuItem<String>(value: materia, child: Text(materia));

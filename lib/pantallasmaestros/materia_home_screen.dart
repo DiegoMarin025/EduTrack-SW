@@ -147,7 +147,7 @@ class _ActionCard extends StatelessWidget {
               height: 46,
               decoration: BoxDecoration(
                 color: enabled
-                    ? const Color(0xFF2D63ED).withOpacity(0.10)
+                    ? const Color(0xFF2D63ED).withValues(alpha: 0.10)
                     : const Color(0xFFF1F5F9),
                 borderRadius: BorderRadius.circular(16),
               ),

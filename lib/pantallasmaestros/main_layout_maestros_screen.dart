@@ -157,7 +157,7 @@ class _MainLayoutMaestrosState extends State<MainLayoutMaestros> {
                     if (context.mounted) {
                       Navigator.of(context).pushReplacement(
                         MaterialPageRoute(
-                          builder: (context) => const LoginPage(),
+                          builder: (context) => LoginPage(),
                         ),
                       );
                     }
@@ -230,7 +230,7 @@ class _MainLayoutMaestrosState extends State<MainLayoutMaestros> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(6),
             ),
             child: const Text(
@@ -260,7 +260,7 @@ class _MainLayoutMaestrosState extends State<MainLayoutMaestros> {
             ? LinearGradient(
                 colors: [
                   Colors.deepPurple.shade100,
-                  Colors.deepPurple.shade50.withOpacity(0.5),
+                  Colors.deepPurple.shade50.withValues(alpha: 0.5),
                 ],
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,

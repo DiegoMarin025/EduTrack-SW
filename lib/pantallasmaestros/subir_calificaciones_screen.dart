@@ -169,7 +169,7 @@ class _SubirCalificacionesScreenState extends State<SubirCalificacionesScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.white, const Color(0xFFE8D9FF).withOpacity(0.4)],
+          colors: [Colors.white, const Color(0xFFE8D9FF).withValues(alpha: 0.4)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -303,7 +303,7 @@ class _SubirCalificacionesScreenState extends State<SubirCalificacionesScreen> {
               ),
               padding: const EdgeInsets.all(8),
               child: DropdownButtonFormField<int>(
-                value: _selectedGrupoId,
+                initialValue: _selectedGrupoId,
                 decoration: const InputDecoration(border: InputBorder.none),
                 hint: const Text("Selecciona un grupo"),
                 items: _grupos.map((g) {

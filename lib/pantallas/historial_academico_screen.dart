@@ -257,7 +257,7 @@ class _HistorialAcademicoScreenState extends State<HistorialAcademicoScreen> {
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: CircleAvatar(
-          backgroundColor: color.withOpacity(0.1),
+          backgroundColor: color.withValues(alpha: 0.1),
           child: Icon(Icons.book, color: color),
         ),
         title: Text(

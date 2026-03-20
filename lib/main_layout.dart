@@ -55,15 +55,21 @@ class _MainLayoutState extends State<MainLayout> {
     });
   }
 
+  // ------------------------------------------------------------------
+  // CORRECCIÓN AQUÍ: Se agregó 'username: widget.username'
+  // ------------------------------------------------------------------
   List<Widget> get _widgetOptions => <Widget>[
-    TutorDashboard(userId: widget.usuarioId),
-    HistorialAcademicoScreen(
-      alumnoId: widget.usuarioId,
-      onNavigate: _onSelectItem,
-    ),
-    CalendarioScreen(onNavigate: _onSelectItem),
-    AyudaScreen(),
-  ];
+        TutorDashboard(
+          userId: widget.usuarioId,
+          username: widget.username, // <--- Argumento que faltaba
+        ),
+        HistorialAcademicoScreen(
+          alumnoId: widget.usuarioId,
+          onNavigate: _onSelectItem,
+        ),
+        CalendarioScreen(onNavigate: _onSelectItem),
+        AyudaScreen(),
+      ];
 
   static const List<String> _titles = [
     'Mi Desempeño',
@@ -88,7 +94,7 @@ class _MainLayoutState extends State<MainLayout> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_selectedIndex]),
-        backgroundColor: Color(0xFF1E3A8A),
+        backgroundColor: const Color(0xFF1E3A8A),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -168,7 +174,7 @@ class _MainLayoutState extends State<MainLayout> {
                     if (context.mounted) {
                       Navigator.of(context).pushReplacement(
                         MaterialPageRoute(
-                          builder: (context) => const LoginPage(),
+                          builder: (context) => LoginPage(),
                         ),
                       );
                     }
@@ -179,7 +185,6 @@ class _MainLayoutState extends State<MainLayout> {
           ),
         ),
       ),
-
       body: _widgetOptions.elementAt(_selectedIndex),
     );
   }
@@ -201,7 +206,6 @@ class _MainLayoutState extends State<MainLayout> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. EL ICONO / AVATAR
           CircleAvatar(
             radius: 35,
             backgroundColor: Colors.white,
@@ -214,11 +218,7 @@ class _MainLayoutState extends State<MainLayout> {
               ),
             ),
           ),
-
-          // 2. ESPACIO EXTRA
           const SizedBox(height: 25),
-
-          // 3. EL USUARIO Y TEXTO
           Text(
             _nombreDisplay,
             style: const TextStyle(
@@ -266,8 +266,8 @@ class _MainLayoutState extends State<MainLayout> {
         gradient: isSelected
             ? LinearGradient(
                 colors: [
-                  Color(0xFF1E3A8A).withOpacity(0.2),
-                  Color(0xFF1E3A8A).withOpacity(0.05),
+                  const Color(0xFF1E3A8A).withOpacity(0.2),
+                  const Color(0xFF1E3A8A).withOpacity(0.05),
                 ],
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
@@ -278,19 +278,18 @@ class _MainLayoutState extends State<MainLayout> {
       child: ListTile(
         leading: Icon(
           icon,
-          color: isSelected ? Color(0xFF1E3A8A) : Colors.grey.shade700,
+          color: isSelected ? const Color(0xFF1E3A8A) : Colors.grey.shade700,
         ),
         title: Text(
           text,
           style: TextStyle(
-            color: isSelected ? Color(0xFF1E3A8A) : Colors.black87,
+            color: isSelected ? const Color(0xFF1E3A8A) : Colors.black87,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
-        // CORRECCIÓN AQUÍ: Cierra el Drawer antes de cambiar de pantalla
         onTap: () {
-          Navigator.of(context).pop(); // Cierra el menú lateral
-          _onSelectItem(index); // Cambia la pantalla
+          Navigator.of(context).pop(); 
+          _onSelectItem(index);
         },
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),

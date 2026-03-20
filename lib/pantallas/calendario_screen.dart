@@ -170,10 +170,10 @@ class _CalendarioScreenState extends State<CalendarioScreen>
         margin: const EdgeInsets.only(bottom: 14),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [evento.color.withOpacity(0.12), Colors.white],
+            colors: [evento.color.withValues(alpha: 0.12), Colors.white],
           ),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: evento.color.withOpacity(0.18)),
+          border: Border.all(color: evento.color.withValues(alpha: 0.18)),
         ),
         child: ListTile(
           leading: CircleAvatar(
