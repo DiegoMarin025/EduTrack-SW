@@ -4,6 +4,29 @@ const mysql = require('mysql2');
 const cors = require('cors');
 require('dotenv').config();
 
+function ensureAuxTables() {
+    const createActivitiesTableSql = `
+        CREATE TABLE IF NOT EXISTS calificaciones_actividades (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            alumno_id INT NOT NULL,
+            clase_id INT NOT NULL,
+            titulo VARCHAR(150) NOT NULL,
+            calificacion DECIMAL(4,2) NULL,
+            comentario TEXT NULL,
+            fecha_registro DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            fecha_actualizacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_calif_actividades_alumno_clase (alumno_id, clase_id),
+            INDEX idx_calif_actividades_clase (clase_id)
+        )
+    `;
+
+    db.query(createActivitiesTableSql, (err) => {
+        if (err) {
+            console.error('Error creando tabla calificaciones_actividades:', err);
+        }
+    });
+}
+
 const app = express();
 const PORT = 3000;
 
@@ -19,8 +42,17 @@ const db = mysql.createConnection({
 });
 
 db.connect((err) => {
+<<<<<<< HEAD
   if (err) console.error('Error al conectar a la DB:', err);
   else console.log(' Conectado a la base de datos MySQL (EduTrack Final)');
+=======
+  if (err) {
+    console.error('Error al conectar a la DB:', err);
+  } else {
+    console.log(' Conectado a la base de datos MySQL (EduTrack Final)');
+    ensureAuxTables();
+  }
+>>>>>>> vista-maestro
 });
 
 // ================= FUNCIÓN AUXILIAR =================
@@ -30,6 +62,59 @@ function crearNotificacion(uid, titulo, mensaje) {
         if (err) console.error("Error creando notificación:", err);
         else console.log(`Notificación enviada al usuario ${uid}: ${titulo}`);
     });
+}
+
+function parseNullableGrade(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const num = Number.parseFloat(value);
+    return Number.isFinite(num) ? num : null;
+}
+
+function roundGrade(value) {
+    if (value === null || value === undefined) return null;
+    return Number.parseFloat(Number(value).toFixed(1));
+}
+
+function computeAverageGrade(activities) {
+    const grades = activities
+        .map((activity) => parseNullableGrade(activity.calificacion))
+        .filter((grade) => grade !== null);
+
+    if (!grades.length) return null;
+
+    const total = grades.reduce((sum, grade) => sum + grade, 0);
+    return roundGrade(total / grades.length);
+}
+
+function mapActivityRow(row) {
+    let fecha = '';
+    if (row.fecha_registro instanceof Date) {
+        fecha = row.fecha_registro.toISOString();
+    } else if (row.fecha_registro) {
+        fecha = String(row.fecha_registro);
+    }
+
+    return {
+        id: row.id,
+        titulo: row.titulo || 'Actividad',
+        calificacion: parseNullableGrade(row.calificacion),
+        comentario: row.comentario || '',
+        fecha: fecha,
+        tipo: row.tipo || 'actividad'
+    };
+}
+
+function groupActivitiesByClass(rows) {
+    const map = {};
+
+    for (const row of rows) {
+        if (!map[row.clase_id]) {
+            map[row.clase_id] = [];
+        }
+        map[row.clase_id].push(mapActivityRow(row));
+    }
+
+    return map;
 }
 
 // ================= RUTAS PRINCIPALES =================
@@ -105,6 +190,183 @@ app.get('/mis_grupos', (req, res) => {
 
     res.json(Object.values(map));
   });
+});
+
+// 2. OBTENER ALUMNOS POR CLASE
+// Recibe clase_id = materias_grupos.id y resuelve el grupo físico asociado.
+app.get('/grupos/:clase_id/alumnos', (req, res) => {
+    const { clase_id } = req.params;
+
+    const sql = `
+        SELECT DISTINCT u.id, u.nombre, u.email AS correo
+        FROM materias_grupos mg
+        JOIN alumnos_grupos ag ON ag.grupo_id = mg.grupo_id
+        JOIN usuarios u ON u.id = ag.alumno_id
+        WHERE mg.id = ?
+          AND u.rol = 'alumno'
+        ORDER BY u.nombre ASC
+    `;
+
+    db.query(sql, [clase_id], (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(results);
+    });
+});
+
+app.get('/grupos/:clase_id/calificaciones_resumen', (req, res) => {
+    const { clase_id } = req.params;
+
+    const sql = `
+        SELECT
+            u.id,
+            u.nombre,
+            u.email AS correo,
+            cf.calificacion AS calificacion_final,
+            COALESCE(act.total_actividades, 0) AS total_actividades,
+            act.promedio_actividades,
+            act.ultimo_comentario
+        FROM materias_grupos mg
+        JOIN alumnos_grupos ag ON ag.grupo_id = mg.grupo_id
+        JOIN usuarios u ON u.id = ag.alumno_id
+        LEFT JOIN calificaciones_finales cf
+            ON cf.alumno_id = u.id
+            AND cf.materia_id = mg.materia_id
+        LEFT JOIN (
+            SELECT
+                clase_id,
+                alumno_id,
+                COUNT(*) AS total_actividades,
+                ROUND(AVG(CASE WHEN calificacion IS NOT NULL THEN calificacion END), 2) AS promedio_actividades,
+                SUBSTRING_INDEX(
+                    GROUP_CONCAT(NULLIF(TRIM(comentario), '') ORDER BY fecha_registro DESC SEPARATOR '|||'),
+                    '|||',
+                    1
+                ) AS ultimo_comentario
+            FROM calificaciones_actividades
+            GROUP BY clase_id, alumno_id
+        ) act
+            ON act.clase_id = mg.id
+            AND act.alumno_id = u.id
+        WHERE mg.id = ?
+          AND u.rol = 'alumno'
+        ORDER BY u.nombre ASC
+    `;
+
+    db.query(sql, [clase_id], (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        const payload = results.map((row) => ({
+            id: row.id,
+            nombre: row.nombre,
+            correo: row.correo,
+            calificacion_final: parseNullableGrade(row.calificacion_final),
+            total_actividades: Number(row.total_actividades || 0),
+            promedio_actividades: parseNullableGrade(row.promedio_actividades),
+            ultimo_comentario: row.ultimo_comentario || ''
+        }));
+
+        res.json(payload);
+    });
+});
+
+app.get('/calificaciones_actividades', (req, res) => {
+    const { alumno_id, grupo_id } = req.query;
+
+    if (!alumno_id || !grupo_id) {
+        return res.status(400).json({ error: 'Faltan alumno_id o grupo_id' });
+    }
+
+    const sql = `
+        SELECT id, alumno_id, clase_id, titulo, calificacion, comentario, fecha_registro
+        FROM calificaciones_actividades
+        WHERE alumno_id = ?
+          AND clase_id = ?
+        ORDER BY fecha_registro DESC, id DESC
+    `;
+
+    db.query(sql, [alumno_id, grupo_id], (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(results.map(mapActivityRow));
+    });
+});
+
+app.post('/calificaciones_actividades', (req, res) => {
+    const { alumno_id, grupo_id, titulo, calificacion, comentario } = req.body;
+
+    const tituloLimpio = String(titulo || '').trim() || 'Actividad';
+    const comentarioLimpio = String(comentario || '').trim();
+    const calificacionNumero = parseNullableGrade(calificacion);
+
+    if (!alumno_id || !grupo_id) {
+        return res.status(400).json({ error: 'Faltan alumno_id o grupo_id' });
+    }
+
+    if (calificacionNumero === null && !comentarioLimpio) {
+        return res.status(400).json({ error: 'Agrega una calificación o un comentario' });
+    }
+
+    if (calificacionNumero !== null && (calificacionNumero < 0 || calificacionNumero > 10)) {
+        return res.status(400).json({ error: 'La calificación debe estar entre 0 y 10' });
+    }
+
+    const materiaSql = `
+        SELECT m.nombre AS materia_nombre
+        FROM materias_grupos mg
+        JOIN materias m ON mg.materia_id = m.id
+        WHERE mg.id = ?
+        LIMIT 1
+    `;
+
+    db.query(materiaSql, [grupo_id], (err, materiaRows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!materiaRows.length) return res.status(404).json({ error: 'Clase no encontrada' });
+
+        const insertSql = `
+            INSERT INTO calificaciones_actividades (
+                alumno_id,
+                clase_id,
+                titulo,
+                calificacion,
+                comentario,
+                fecha_registro,
+                fecha_actualizacion
+            )
+            VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+        `;
+
+        db.query(
+            insertSql,
+            [alumno_id, grupo_id, tituloLimpio, calificacionNumero, comentarioLimpio || null],
+            (insertErr, result) => {
+                if (insertErr) return res.status(500).json({ error: insertErr.message });
+
+                const materiaNombre = materiaRows[0].materia_nombre || 'tu materia';
+                const partes = [];
+
+                if (calificacionNumero !== null) {
+                    partes.push(`${tituloLimpio}: ${calificacionNumero}`);
+                }
+
+                if (comentarioLimpio) {
+                    const resumen = comentarioLimpio.length > 90
+                        ? `${comentarioLimpio.slice(0, 87)}...`
+                        : comentarioLimpio;
+                    partes.push(`Comentario: ${resumen}`);
+                }
+
+                crearNotificacion(
+                    alumno_id,
+                    'Nueva actividad registrada',
+                    `${materiaNombre} • ${partes.join(' | ')}`
+                );
+
+                res.json({
+                    message: 'Actividad guardada',
+                    id: result.insertId
+                });
+            }
+        );
+    });
 });
 
 // 3. OBTENER CALIFICACIONES
@@ -388,38 +650,93 @@ app.get('/dashboard/:id', (req, res) => {
     const { id } = req.params;
     const sqlAlumno = 'SELECT nombre FROM usuarios WHERE id = ? AND rol = "alumno"';
     const sqlMaterias = `
-        SELECT m.nombre as materia, cf.calificacion 
+        SELECT
+            mg.id AS clase_id,
+            m.nombre AS materia,
+            cf.calificacion AS calificacion_final
         FROM alumnos_grupos ag
         JOIN materias_grupos mg ON ag.grupo_id = mg.grupo_id
         JOIN materias m ON mg.materia_id = m.id
         LEFT JOIN calificaciones_finales cf ON cf.materia_id = mg.materia_id AND cf.alumno_id = ag.alumno_id
         WHERE ag.alumno_id = ?
+        ORDER BY m.nombre
     `;
+    const sqlActividades = `
+        SELECT
+            id,
+            clase_id,
+            titulo,
+            calificacion,
+            comentario,
+            fecha_registro
+        FROM calificaciones_actividades
+        WHERE alumno_id = ?
+        ORDER BY fecha_registro DESC, id DESC
+    `;
+
     db.query(sqlAlumno, [id], (err, userResults) => {
         if (err || userResults.length === 0) return res.status(404).json({ error: 'Alumno no encontrado' });
         const alumno = userResults[0];
+
         db.query(sqlMaterias, [id], (err, matResults) => {
             if (err) return res.status(500).json({ error: err.message });
-            let total = 0; let count = 0;
-            const subjects = matResults.map(row => {
-                let calif = null; let estado = 'Pendiente';
-                if (row.calificacion !== null) {
-                    calif = parseFloat(row.calificacion);
-                    total += calif; count++;
-                    estado = calif >= 7.0 ? 'Aprobada' : 'Reprobada';
-                }
-                return { materia: row.materia, calificacion: calif, estado: estado };
+
+            db.query(sqlActividades, [id], (activitiesErr, activitiesResults) => {
+                if (activitiesErr) return res.status(500).json({ error: activitiesErr.message });
+
+                const activitiesByClass = groupActivitiesByClass(activitiesResults);
+                let total = 0;
+                let count = 0;
+
+                const subjects = matResults.map((row) => {
+                    const activities = activitiesByClass[row.clase_id] || [];
+                    const finalGrade = parseNullableGrade(row.calificacion_final);
+                    const averageActivities = computeAverageGrade(activities);
+                    const calif = finalGrade !== null ? finalGrade : averageActivities;
+
+                    let estado = 'Pendiente';
+                    if (calif !== null) {
+                        total += calif;
+                        count++;
+                        estado = calif >= 7.0 ? 'Aprobada' : 'Reprobada';
+                    }
+
+                    return {
+                        clase_id: row.clase_id,
+                        materia: row.materia,
+                        calificacion: calif,
+                        estado: estado,
+                        total_actividades: activities.length,
+                        actividades: activities.slice(0, 5)
+                    };
+                });
+
+                const avg = count > 0 ? roundGrade(total / count) : 0.0;
+                res.json({
+                    average: avg,
+                    student: {
+                        nombre: alumno.nombre,
+                        carrera: 'Software',
+                        matricula: id.toString()
+                    },
+                    subjects: subjects
+                });
             });
-            const avg = count > 0 ? (total / count) : 0.0;
-            res.json({ average: parseFloat(avg.toFixed(1)), student: { nombre: alumno.nombre, carrera: 'Software', matricula: id.toString() }, subjects: subjects });
         });
     });
 });
 
 // 16. REPORTE SOPORTE
 app.post('/reportes_soporte', (req, res) => {
-    const { usuario_id, email, mensaje } = req.body;
-    db.query('INSERT INTO reportes_soporte (usuario_id, email, mensaje) VALUES (?, ?, ?)', [usuario_id, email, mensaje], (err, result) => {
+    const usuarioId = Number.parseInt(req.body.usuario_id, 10);
+    const email = String(req.body.email || '').trim();
+    const mensaje = String(req.body.mensaje || '').trim();
+
+    if (!email || !mensaje) {
+        return res.status(400).json({ error: 'Faltan datos del reporte' });
+    }
+
+    db.query('INSERT INTO reportes_soporte (usuario_id, email, mensaje) VALUES (?, ?, ?)', [Number.isNaN(usuarioId) ? 0 : usuarioId, email, mensaje], (err, result) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: 'Reporte guardado', id: result.insertId });
     });
@@ -428,24 +745,77 @@ app.post('/reportes_soporte', (req, res) => {
 // 17. HISTORIAL
 app.get('/historial_academico/:alumnoId', (req, res) => {
     const { alumnoId } = req.params;
-    const sql = `
-        SELECT m.nombre, cf.calificacion, g.nombre AS grupo_nombre, u.nombre AS profesor 
-        FROM calificaciones_finales cf
-        JOIN materias m ON cf.materia_id = m.id
-        JOIN materias_grupos mg ON m.id = mg.materia_id
+    const sqlMaterias = `
+        SELECT
+            mg.id AS clase_id,
+            m.nombre,
+            g.nombre AS grupo_nombre,
+            u.nombre AS profesor,
+            cf.calificacion AS calificacion_final
+        FROM alumnos_grupos ag
+        JOIN materias_grupos mg ON ag.grupo_id = mg.grupo_id
+        JOIN materias m ON mg.materia_id = m.id
         JOIN grupos g ON mg.grupo_id = g.id
         LEFT JOIN usuarios u ON mg.profesor_id = u.id
-        WHERE cf.alumno_id = ? ORDER BY g.nombre, m.nombre
+        LEFT JOIN calificaciones_finales cf
+            ON cf.materia_id = mg.materia_id
+            AND cf.alumno_id = ag.alumno_id
+        WHERE ag.alumno_id = ?
+        ORDER BY g.nombre, m.nombre
     `;
-    db.query(sql, [alumnoId], (err, results) => {
+    const sqlActividades = `
+        SELECT
+            id,
+            clase_id,
+            titulo,
+            calificacion,
+            comentario,
+            fecha_registro
+        FROM calificaciones_actividades
+        WHERE alumno_id = ?
+        ORDER BY fecha_registro DESC, id DESC
+    `;
+
+    db.query(sqlMaterias, [alumnoId], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
-        const semestres = {};
-        results.forEach(row => {
-            const sem = row.grupo_nombre || 'Sin Grupo';
-            if (!semestres[sem]) semestres[sem] = [];
-            semestres[sem].push({ nombre: row.nombre, profesor: row.profesor || 'Desc.', semestre: sem, evaluaciones: [{ nombre: 'Final', peso: 100, calificacion: row.calificacion || 0 }] });
+
+        db.query(sqlActividades, [alumnoId], (activitiesErr, activityRows) => {
+            if (activitiesErr) return res.status(500).json({ error: activitiesErr.message });
+
+            const activitiesByClass = groupActivitiesByClass(activityRows);
+            const semestres = {};
+
+            results.forEach((row) => {
+                const sem = row.grupo_nombre || 'Sin Grupo';
+                const activities = activitiesByClass[row.clase_id] || [];
+                const finalGrade = parseNullableGrade(row.calificacion_final);
+                const averageActivities = computeAverageGrade(activities);
+                const finalToShow = finalGrade !== null
+                    ? finalGrade
+                    : (averageActivities !== null ? averageActivities : 0);
+
+                if (!semestres[sem]) semestres[sem] = [];
+
+                const evaluaciones = activities.map((activity) => ({
+                    nombre: activity.titulo,
+                    peso: activities.length ? roundGrade(100 / activities.length) : 0,
+                    calificacion: activity.calificacion,
+                    comentario: activity.comentario,
+                    fecha: activity.fecha,
+                    tipo: 'actividad'
+                }));
+
+                semestres[sem].push({
+                    nombre: row.nombre,
+                    profesor: row.profesor || 'Desc.',
+                    semestre: sem,
+                    calificacion_final: finalToShow,
+                    evaluaciones: evaluaciones
+                });
+            });
+
+            res.json({ semestres: semestres });
         });
-        res.json({ semestres: semestres });
     });
 });
 

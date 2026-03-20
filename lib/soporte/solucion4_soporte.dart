@@ -19,11 +19,27 @@ class _Solution4SoporteState extends State<Solution4Soporte> {
   bool _isSending = false;
   int _usuarioId = 0;
   String _userEmail = '';
+  bool get _canSend =>
+      aceptaInfo && detallesController.text.trim().isNotEmpty && !_isSending;
 
   @override
   void initState() {
     super.initState();
+    detallesController.addListener(_onDetallesChanged);
     _cargarDatosUsuario();
+  }
+
+  void _onDetallesChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    detallesController.removeListener(_onDetallesChanged);
+    detallesController.dispose();
+    super.dispose();
   }
 
   // Cargar datos del usuario para el reporte
@@ -225,12 +241,7 @@ class _Solution4SoporteState extends State<Solution4Soporte> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed:
-                              (aceptaInfo &&
-                                  detallesController.text.isNotEmpty &&
-                                  !_isSending)
-                              ? _enviarReporte
-                              : null,
+                          onPressed: _canSend ? _enviarReporte : null,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.deepPurple,
                             foregroundColor: Colors.white,

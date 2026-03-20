@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import 'detalles_materia_screen.dart';
 import 'materia_models.dart'; // Asegúrate de que este archivo existe en la misma carpeta o ajusta la ruta
 // Si está en la misma carpeta: import 'materia_models.dart';
 // Si está en lib: import '../materia_models.dart';
@@ -247,7 +248,7 @@ class _HistorialAcademicoScreenState extends State<HistorialAcademicoScreen> {
   // ---------------------------------------------------------------------------
   Widget _buildMateriaCard(Materia materia) {
     double nota = materia.calificacionFinal;
-    String estatus = materia.estatus ?? "Finalizado"; // Asegurar valor
+    String estatus = materia.estatus;
     Color color = _getCalificacionColor(nota, estatus);
 
     return Card(
@@ -266,9 +267,19 @@ class _HistorialAcademicoScreenState extends State<HistorialAcademicoScreen> {
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4.0),
-          child: Text(
-            "Prof: ${materia.profesor}",
-            style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Prof: ${materia.profesor}",
+                style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+              ),
+              if (materia.evaluaciones.isNotEmpty)
+                Text(
+                  "${materia.evaluaciones.length} actividades registradas",
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+            ],
           ),
         ),
         trailing: Column(
@@ -296,14 +307,12 @@ class _HistorialAcademicoScreenState extends State<HistorialAcademicoScreen> {
         ),
         onTap: () {
           // Aquí podrías navegar a detalles si tienes esa pantalla
-          /*
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) => DetallesMateriaScreen(materia: materia),
             ),
           );
-          */
         },
       ),
     );

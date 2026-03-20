@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../pantallas/ayuda_screen.dart';
 import '../services/api_service.dart';
-import 'pasar_lista_screen.dart';
+import 'materia_home_screen.dart';
+import 'mis_grupos_screen.dart';
+import 'subir_calificaciones_screen.dart';
+import 'teacher_navigation_helper.dart';
 
 class PanelDocenteScreen extends StatefulWidget {
-  const PanelDocenteScreen({super.key});
+  final ValueChanged<int>? onNavigateToSection;
+
+  const PanelDocenteScreen({super.key, this.onNavigateToSection});
 
   @override
   State<PanelDocenteScreen> createState() => _PanelDocenteScreenState();
@@ -15,6 +21,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
   String _nombreProfesor = "Profesor";
   String _claseEnCurso = "Cargando...";
   String _subClaseEnCurso = "";
+  Grupo? _claseEnCursoGrupo;
   int _totalGrupos = 0;
   int _totalAlumnos = 0;
   bool _isLoading = true;
@@ -81,9 +88,11 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
 
         if (gruposAsignados.isNotEmpty) {
           final primeraClase = gruposAsignados.first;
+          _claseEnCursoGrupo = primeraClase;
           _claseEnCurso = primeraClase.materia;
           _subClaseEnCurso = "Grupo ${primeraClase.nombre}";
         } else {
+          _claseEnCursoGrupo = null;
           _claseEnCurso = "Sin clases asignadas";
           _subClaseEnCurso = "Ve a Mis Grupos";
         }
@@ -92,6 +101,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
+        _claseEnCursoGrupo = null;
         _errorMsg = "Error al conectar con el servidor.";
       });
     }
@@ -101,6 +111,12 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
   // ✅ PASAR LISTA RÁPIDO (BOTÓN DEL DASHBOARD)
   // ======================================================
   Future<void> _abrirPasarListaRapido() async {
+    await TeacherNavigationHelper.openQuickAttendance(
+      context: context,
+      profesorId: _profesorId,
+    );
+
+/*
     if (_profesorId == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("No se encontró el profesor.")),
@@ -230,6 +246,57 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
         SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
       );
     }
+*/
+  }
+
+  void _abrirApartado(int index) {
+    if (widget.onNavigateToSection != null) {
+      widget.onNavigateToSection!(index);
+      return;
+    }
+
+    final builders = <int, WidgetBuilder>{
+      1: (_) => const MisGruposScreen(),
+      2: (_) => const SubirCalificacionesScreen(),
+      4: (_) => const AyudaScreen(),
+    };
+
+    final builder = builders[index];
+    if (builder == null) return;
+
+    Navigator.push(context, MaterialPageRoute(builder: builder));
+  }
+
+  void _abrirMaterias() {
+    _abrirApartado(1);
+  }
+
+  void _abrirCalificaciones() {
+    _abrirApartado(2);
+  }
+
+  void _abrirSoporte() {
+    _abrirApartado(4);
+  }
+
+  void _abrirClaseEnCurso() {
+    final claseActual = _claseEnCursoGrupo;
+    if (claseActual == null) {
+      _abrirMaterias();
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MateriaHomeScreen(
+          nombreGrupo: claseActual.nombre,
+          grupoIdReal: claseActual.grupoIdReal,
+          materia: claseActual.materia,
+          representative: claseActual,
+        ),
+      ),
+    );
   }
 
   @override
@@ -459,9 +526,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
             _pill(
               icon: Icons.arrow_forward_rounded,
               text: "Ver",
-              onTap: () {
-                // Navigator.pushNamed(context, '/misGrupos');
-              },
+              onTap: _abrirClaseEnCurso,
             ),
           ],
         ),
@@ -574,21 +639,21 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
         subtitle: "Evaluar rápido",
         icon: Icons.grade_rounded,
         tint: const Color(0xFFF59E0B),
-        onTap: () {},
+        onTap: _abrirCalificaciones,
       ),
       _ActionItem(
-        title: "Mis grupos",
-        subtitle: "Alumnos y listas",
+        title: "Materias",
+        subtitle: "Grupos y alumnos",
         icon: Icons.class_rounded,
         tint: const Color(0xFF10B981),
-        onTap: () {},
+        onTap: _abrirMaterias,
       ),
       _ActionItem(
-        title: "Reportes",
-        subtitle: "Resumen semanal",
-        icon: Icons.bar_chart_rounded,
+        title: "Soporte",
+        subtitle: "Ayuda del sistema",
+        icon: Icons.support_agent_rounded,
         tint: const Color(0xFF8B5CF6),
-        onTap: () {},
+        onTap: _abrirSoporte,
       ),
     ];
 
@@ -671,7 +736,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
               ? _subClaseEnCurso
               : "Sin información adicional",
           icon: Icons.school_rounded,
-          onTap: () {},
+          onTap: _abrirClaseEnCurso,
         ),
         const SizedBox(height: 12),
         _feedCard(

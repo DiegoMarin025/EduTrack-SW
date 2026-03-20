@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'services/api_service.dart';
+import 'login_page.dart';
+import 'main_layout.dart';
+import 'pantallasmaestros/main_layout_maestros_screen.dart';
 
 class RegisterPage extends StatefulWidget {
   @override
@@ -8,233 +11,325 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
-  final _formKey = GlobalKey<FormState>();
-
-  // Controladores originales + el nuevo del Tutor
-  final TextEditingController _nombreController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController =
+  // Controladores
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
+  final TextEditingController confirmPasswordController =
       TextEditingController();
   final TextEditingController _matriculaHijoController =
       TextEditingController(); // Agregado para el Tutor
 
+  String userType = "Alumno";
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
-  // Lógica de registro adaptada para Tutor
-  Future<void> _registrar() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
+  @override
+  void dispose() {
+    nameController.dispose();
+    emailController.dispose();
+    passwordController.dispose();
+    confirmPasswordController.dispose();
+    super.dispose();
+  }
 
-      try {
-        final response = await http.post(
-          // Mantengo tu endpoint, tu compañero de DB lo gestionará luego
-          Uri.parse('http://localhost:3000/register'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'nombre': _nombreController.text,
-            'email': _emailController.text,
-            'password': _passwordController.text,
-            'rol': 'tutor', // Forzamos el rol a tutor para tu rama
-            'matricula_hijo': _matriculaHijoController
-                .text, // Campo obligatorio para el tutor
-          }),
+  void register() async {
+    // 1. Validar campos vacíos
+    if (nameController.text.isEmpty ||
+        emailController.text.isEmpty ||
+        passwordController.text.isEmpty ||
+        confirmPasswordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Por favor completa todos los campos")),
+      );
+      return;
+    }
+
+    // 2. Validar coincidencia
+    if (passwordController.text != confirmPasswordController.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Las contraseñas no coinciden")),
+      );
+      return;
+    }
+
+    // 3. Validar longitud
+    if (passwordController.text.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("La contraseña debe tener al menos 6 caracteres"),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // 4. Registro en DB (AQUÍ SÍ ENVIAMOS EL userType)
+      await ApiService.registerUser(
+        nameController.text.trim(),
+        emailController.text.trim(),
+        passwordController.text.trim(),
+        userType, // <--- Correcto: El registro necesita saber qué rol crear
+      );
+
+      // 5. Auto-Login (CORREGIDO: YA NO ENVIAMOS userType)
+      // La API ahora detecta el rol automáticamente
+      final usuario = await ApiService.loginUser(
+        emailController.text.trim(),
+        passwordController.text.trim(),
+        // userType, <--- ELIMINADO: Esto causaba el error
+      );
+
+      // 6. Guardar sesión
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('saved_username', emailController.text.trim());
+      await prefs.setString('saved_password', passwordController.text.trim());
+      await prefs.setString('saved_userType', userType);
+      await prefs.setString('saved_name', usuario['nombre']);
+
+      final int userId = int.tryParse(usuario['id'].toString()) ?? 0;
+      await prefs.setInt('saved_id', userId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("¡Bienvenido ${usuario['nombre']}!"),
+            backgroundColor: Colors.green,
+          ),
         );
-
-        if (response.statusCode == 201) {
-          _showSnackBar('Registro de Tutor exitoso', Colors.green);
-          Navigator.pop(context);
-        } else {
-          final errorData = jsonDecode(response.body);
-          _showSnackBar(
-            errorData['message'] ?? 'Error al registrar',
-            Colors.red,
-          );
-        }
-      } catch (e) {
-        _showSnackBar('Error de conexión con el servidor', Colors.red);
-      } finally {
-        setState(() {
-          _isLoading = false;
-        });
+        // Navegar
+        _navegarAlHome(userId);
       }
+    } catch (e) {
+      if (mounted) {
+        final errorMessage = e.toString().replaceAll('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 10),
+                Expanded(child: Text(errorMessage)),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _showSnackBar(String message, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _navegarAlHome(int userId) {
+    final raw = nameController.text.trim();
+    final displayName = raw.isNotEmpty ? raw.split(' ')[0] : 'Usuario';
+
+    if (userType == "Maestro" || userType == "Profesor") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MainLayoutMaestros()),
+      );
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              MainLayout(username: displayName, usuarioId: userId),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Mantenemos tu diseño de fondo y colores
-      backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        title: Text(
-          'Registro de Tutor',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.blue[900],
-        elevation: 0,
-        iconTheme: IconThemeData(color: Colors.white),
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.blue[900]!, Colors.blue[600]!],
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Card(
-                elevation: 8,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
+      backgroundColor: Colors.grey[200],
+      body: Center(
+        child: SingleChildScrollView(
+          child: Container(
+            width: 350,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(25),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(32.0),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.family_restroom,
-                          size: 80,
-                          color: Colors.blue[900],
-                        ), // Cambiado a ícono de familia
-                        SizedBox(height: 16),
-                        Text(
-                          'Bienvenido Tutor',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue[900],
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Crea una cuenta para seguir el progreso de tu hijo',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                        SizedBox(height: 32),
+              ],
+            ),
+            child: Column(
+              children: [
+                const Icon(
+                  Icons.person_add,
+                  size: 90,
+                  color: Color(0xFF1E3A8A),
+                ),
+                const SizedBox(height: 15),
+                const Text(
+                  "Registro",
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 20),
 
-                        // Nombre completo
-                        _buildTextField(
-                          controller: _nombreController,
-                          label: 'Nombre Completo',
-                          icon: Icons.person_outline,
-                          validator: (value) =>
-                              value!.isEmpty ? 'Ingresa tu nombre' : null,
-                        ),
-                        SizedBox(height: 20),
-
-                        // Email
-                        _buildTextField(
-                          controller: _emailController,
-                          label: 'Correo Electrónico',
-                          icon: Icons.email_outlined,
-                          keyboardType: TextInputType.emailAddress,
-                          validator: (value) {
-                            if (value == null || value.isEmpty)
-                              return 'Ingresa un correo';
-                            if (!value.contains('@'))
-                              return 'Ingresa un correo válido';
-                            return null;
-                          },
-                        ),
-                        SizedBox(height: 20),
-
-                        // MATRÍCULA DEL HIJO (EL CAMBIO CLAVE)
-                        _buildTextField(
-                          controller: _matriculaHijoController,
-                          label: 'Matrícula del Hijo',
-                          icon: Icons.badge_outlined,
-                          hint: 'Ej. 202300456',
-                          validator: (value) {
-                            if (value == null || value.isEmpty)
-                              return 'La matrícula es obligatoria';
-                            return null;
-                          },
-                        ),
-                        SizedBox(height: 20),
-
-                        // Contraseña
-                        _buildPasswordField(
-                          controller: _passwordController,
-                          label: 'Contraseña',
-                          obscure: _obscurePassword,
-                          onToggle: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
-                          ),
-                          validator: (value) =>
-                              value!.length < 6 ? 'Mínimo 6 caracteres' : null,
-                        ),
-                        SizedBox(height: 20),
-
-                        // Confirmar Contraseña
-                        _buildPasswordField(
-                          controller: _confirmPasswordController,
-                          label: 'Confirmar Contraseña',
-                          obscure: _obscureConfirmPassword,
-                          onToggle: () => setState(
-                            () => _obscureConfirmPassword =
-                                !_obscureConfirmPassword,
-                          ),
-                          validator: (value) {
-                            if (value != _passwordController.text)
-                              return 'Las contraseñas no coinciden';
-                            return null;
-                          },
-                        ),
-                        SizedBox(height: 40),
-
-                        // Botón de Registro
-                        _isLoading
-                            ? CircularProgressIndicator()
-                            : SizedBox(
-                                width: double.infinity,
-                                height: 55,
-                                child: ElevatedButton(
-                                  onPressed: _registrar,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blue[900],
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    elevation: 5,
-                                  ),
-                                  child: Text(
-                                    'REGISTRAR TUTOR',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                      ],
+                // Nombre
+                TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    labelText: "Nombre completo",
+                    prefixIcon: const Icon(Icons.person_outline),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
                     ),
                   ),
                 ),
-              ),
+                const SizedBox(height: 15),
+
+                // Correo
+                TextField(
+                  controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: "Correo electrónico",
+                    prefixIcon: const Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 15),
+
+                // Tipo usuario
+                DropdownButtonFormField<String>(
+                  value: userType,
+                  items: const [
+                    DropdownMenuItem(value: "Alumno", child: Text("Alumno")),
+                    DropdownMenuItem(value: "Maestro", child: Text("Maestro")),
+                  ],
+                  onChanged: (value) {
+                    setState(() => userType = value.toString());
+                  },
+                  decoration: InputDecoration(
+                    labelText: "Tipo de usuario",
+                    prefixIcon: const Icon(Icons.school_outlined),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 15),
+
+                // --- CONTRASEÑA (CON OJITO) ---
+                TextField(
+                  controller: passwordController,
+                  obscureText: _obscurePassword, // Variable de estado
+                  decoration: InputDecoration(
+                    labelText: "Contraseña",
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                        color: Colors.grey,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscurePassword = !_obscurePassword;
+                        });
+                      },
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 15),
+
+                // --- CONFIRMAR CONTRASEÑA ---
+                TextField(
+                  controller: confirmPasswordController,
+                  obscureText: _obscureConfirmPassword, // Variable de estado
+                  decoration: InputDecoration(
+                    labelText: "Confirmar Contraseña",
+                    prefixIcon: const Icon(Icons.lock_reset),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscureConfirmPassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                        color: Colors.grey,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscureConfirmPassword = !_obscureConfirmPassword;
+                        });
+                      },
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Botón Registrar
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : register,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Color(0xFF1E3A8A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            "Registrar",
+                            style: TextStyle(fontSize: 18),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Ir al Login
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LoginPage(),
+                      ),
+                    );
+                  },
+                  child: const Text("¿Ya tienes cuenta? Inicia sesión"),
+                ),
+              ],
             ),
           ),
         ),
