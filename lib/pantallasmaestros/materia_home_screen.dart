@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'detalle_grupo_screen.dart';
+import 'teacher_navigation_helper.dart';
 
 class MateriaHomeScreen extends StatefulWidget {
   final String nombreGrupo; // TI-52
@@ -33,18 +34,23 @@ class _MateriaHomeScreenState extends State<MateriaHomeScreen> {
 
   Future<void> _cargarAlumnos() async {
     try {
-      // OJO: tú ya tienes endpoint por "widget.representative.id"
-      final alumnos = await ApiService.getAlumnosPorGrupo(
-        widget.representative.id,
+      final alumnos = await ApiService.getAlumnosRegistrados(
+        widget.representative,
       );
       if (!mounted) return;
       setState(() {
         _alumnos = alumnos;
         _loading = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() {
+        _alumnos = [];
+        _loading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error cargando alumnos: $e')),
+      );
     }
   }
 
@@ -60,9 +66,16 @@ class _MateriaHomeScreenState extends State<MateriaHomeScreen> {
     );
   }
 
+  Future<void> _abrirPasarLista() async {
+    await TeacherNavigationHelper.openAttendanceForRepresentative(
+      context: context,
+      representative: widget.representative,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final title = "${widget.nombreGrupo} • ${widget.materia}";
+    final title = "${widget.nombreGrupo} - ${widget.materia}";
 
     return Scaffold(
       appBar: AppBar(
@@ -76,11 +89,11 @@ class _MateriaHomeScreenState extends State<MateriaHomeScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // acciones “reales”
+                  // Acciones principales del grupo.
                   _ActionCard(
                     icon: Icons.people_alt_rounded,
                     title: "Ver alumnos",
-                    subtitle: "Lista del grupo y gestión de alumnos",
+                    subtitle: "Lista del grupo y gestion de alumnos",
                     onTap: () {
                       Navigator.push(
                         context,
@@ -94,8 +107,8 @@ class _MateriaHomeScreenState extends State<MateriaHomeScreen> {
                   const SizedBox(height: 10),
                   _ActionCard(
                     icon: Icons.grade_rounded,
-                    title: "Calificaciones rápidas",
-                    subtitle: "Captura rápida por alumno (0–10)",
+                    title: "Calificaciones rapidas",
+                    subtitle: "Captura rapida por alumno (0-10)",
                     onTap: _alumnos.isEmpty
                         ? null
                         : _abrirCalificacionesRapidas,
@@ -103,9 +116,9 @@ class _MateriaHomeScreenState extends State<MateriaHomeScreen> {
                   const SizedBox(height: 10),
                   _ActionCard(
                     icon: Icons.checklist_rounded,
-                    title: "Pasar lista (próximo)",
-                    subtitle: "Registro de asistencia por día",
-                    onTap: null, // lo conectamos después
+                    title: "Pasar lista",
+                    subtitle: "Registro de asistencia por dia",
+                    onTap: _alumnos.isEmpty ? null : _abrirPasarLista,
                   ),
                 ],
               ),
@@ -271,7 +284,7 @@ class _CalificacionesRapidasSheetState
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              "Calificaciones rápidas • ${widget.materia}",
+              "Calificaciones rapidas - ${widget.materia}",
               style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
             ),
             const SizedBox(height: 12),

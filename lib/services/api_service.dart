@@ -69,6 +69,54 @@ class ApiService {
     }
   }
 
+  static Future<List<Alumno>> getAlumnosRegistrados(Grupo grupo) async {
+    List<Alumno> alumnosPorClase = [];
+    Object? claseError;
+    try {
+      alumnosPorClase = await getAlumnosPorGrupo(grupo.id);
+    } catch (error) {
+      claseError = error;
+    }
+
+    if (grupo.grupoIdReal == grupo.id) {
+      if (claseError != null) {
+        throw Exception('No se pudo cargar la clase ${grupo.id}: $claseError');
+      }
+      return alumnosPorClase;
+    }
+
+    List<Alumno> alumnosPorGrupoReal = [];
+    Object? grupoError;
+    try {
+      alumnosPorGrupoReal = await getAlumnosPorGrupo(grupo.grupoIdReal);
+    } catch (error) {
+      grupoError = error;
+    }
+
+    final combinados = <int, Alumno>{};
+
+    for (final alumno in alumnosPorClase) {
+      combinados[alumno.id] = alumno;
+    }
+    for (final alumno in alumnosPorGrupoReal) {
+      combinados[alumno.id] = alumno;
+    }
+
+    final alumnos = combinados.values.toList();
+    alumnos.sort(
+      (a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()),
+    );
+
+    if (alumnos.isEmpty && claseError != null && grupoError != null) {
+      throw Exception(
+        'No se pudieron cargar alumnos por clase (${grupo.id}) ni por grupo (${grupo.grupoIdReal}). '
+        'Clase: $claseError. Grupo: $grupoError',
+      );
+    }
+
+    return alumnos;
+  }
+
   // 3. OBTENER CALIFICACIÓN
   // OJO: grupoId aquí en realidad es "mg.id" (materias_grupos.id)
   static Future<List<CalificacionesResumenAlumno>> getCalificacionesResumen(
@@ -209,12 +257,16 @@ class ApiService {
       body: json.encode({
         'nombre': nombre,
         'correo': correo,
+        'email': correo,
+        'password': contrasena,
         'contrasena': contrasena,
+        'rol': tipoUsuario,
         'tipo_usuario': tipoUsuario,
+        'tipoUsuario': tipoUsuario,
       }),
     );
 
-    if (response.statusCode == 200) {
+    if (response.statusCode >= 200 && response.statusCode < 300) {
       final body = json.decode(response.body);
       return body['id'];
     } else {
@@ -231,7 +283,12 @@ class ApiService {
     final response = await http.post(
       Uri.parse('$baseUrl/login'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({'correo': correo, 'contrasena': contrasena}),
+      body: json.encode({
+        'correo': correo,
+        'email': correo,
+        'contrasena': contrasena,
+        'password': contrasena,
+      }),
     );
 
     if (response.statusCode == 200) {
@@ -266,6 +323,7 @@ class ApiService {
   }) async {
     final nombreClean = nombre.trim();
     final correoClean = correo.trim();
+    const tempPassword = 'Temp12345*';
 
     if (nombreClean.isEmpty) throw Exception('El nombre es obligatorio');
     if (correoClean.isEmpty) throw Exception('El correo es obligatorio');
@@ -276,12 +334,16 @@ class ApiService {
       body: json.encode({
         'nombre': nombreClean,
         'correo': correoClean,
-        'contrasena': 'Temp12345*',
+        'email': correoClean,
+        'password': tempPassword,
+        'contrasena': tempPassword,
+        'rol': 'alumno',
         'tipo_usuario': 'alumno',
+        'tipoUsuario': 'alumno',
       }),
     );
 
-    if (response.statusCode == 200) {
+    if (response.statusCode >= 200 && response.statusCode < 300) {
       final body = json.decode(response.body);
       final int id = body['id'] is int
           ? body['id']

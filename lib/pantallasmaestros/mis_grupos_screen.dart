@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import 'detalle_grupo_screen.dart';
 import 'dialog_crear_clase.dart';
-import 'materia_home_screen.dart';
+import 'teacher_navigation_helper.dart';
 
 class MisGruposScreen extends StatefulWidget {
   const MisGruposScreen({super.key});
@@ -64,7 +64,7 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
   void _abrirDialogoCrear() {
     if (_profesorId == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Error: No se identificó al profesor")),
+        const SnackBar(content: Text("Error: No se identifico al profesor")),
       );
       return;
     }
@@ -132,7 +132,7 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
                 child: ListView(
                   children: [
                     Text(
-                      "Tu salón y tus materias",
+                      "Tu salon y tus materias",
                       style: TextStyle(
                         color: textDark,
                         fontSize: 20,
@@ -141,7 +141,7 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      "Aquí gestionas tu grupo: alumnos, lista del día y calificaciones.",
+                      "Aqui gestionas tu grupo: alumnos, lista del dia y calificaciones.",
                       style: TextStyle(
                         color: textSoft,
                         fontSize: 13.5,
@@ -206,14 +206,11 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
                             );
                           },
                           onPasarLista: () {
-                            // Por ahora usamos alumnos como “lista”
                             final representative = bundle.items.first;
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    DetalleGrupoScreen(grupo: representative),
-                              ),
+                            TeacherNavigationHelper
+                                .openAttendanceForRepresentative(
+                              context: context,
+                              representative: representative,
                             );
                           },
                         ),

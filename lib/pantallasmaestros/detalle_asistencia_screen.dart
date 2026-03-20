@@ -1,11 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../services/asistencia_export_service.dart';
 import '../services/asistencia_service.dart';
 
-class DetalleAsistenciaScreen extends StatelessWidget {
+class DetalleAsistenciaScreen extends StatefulWidget {
   final AsistenciaRegistro registro;
 
   const DetalleAsistenciaScreen({super.key, required this.registro});
+
+  @override
+  State<DetalleAsistenciaScreen> createState() => _DetalleAsistenciaScreenState();
+}
+
+class _DetalleAsistenciaScreenState extends State<DetalleAsistenciaScreen> {
+  final AsistenciaExportService _exportService = AsistenciaExportService();
+  AsistenciaExportFormat? _exportando;
 
   String _fechaTexto(DateTime fecha) {
     return DateFormat('dd/MM/yyyy').format(fecha);
@@ -44,24 +54,64 @@ class DetalleAsistenciaScreen extends StatelessWidget {
     }
   }
 
-  void _descargarPdf(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Aquí después conectamos la exportación PDF'),
-      ),
-    );
+  Future<void> _exportar(AsistenciaExportFormat format) async {
+    setState(() => _exportando = format);
+
+    try {
+      final result = await _exportService.exportar(
+        registro: widget.registro,
+        format: format,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${format.label} listo: ${result.location}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error exportando ${format.label}: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _exportando = null);
+      }
+    }
   }
 
-  void _descargarWord(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Aquí después conectamos la exportación Word'),
+  Widget _buildExportButton({
+    required AsistenciaExportFormat format,
+    required IconData icon,
+  }) {
+    final isLoading = _exportando == format;
+    final isDisabled = _exportando != null;
+
+    return SizedBox(
+      width: 140,
+      child: OutlinedButton.icon(
+        onPressed: isDisabled ? null : () => _exportar(format),
+        icon: isLoading
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(icon),
+        label: Text(format.label),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final registro = widget.registro;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -106,22 +156,21 @@ class DetalleAsistenciaScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Row(
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _descargarPdf(context),
-                        icon: const Icon(Icons.picture_as_pdf_rounded),
-                        label: const Text('PDF'),
-                      ),
+                    _buildExportButton(
+                      format: AsistenciaExportFormat.pdf,
+                      icon: Icons.picture_as_pdf_rounded,
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _descargarWord(context),
-                        icon: const Icon(Icons.description_rounded),
-                        label: const Text('Word'),
-                      ),
+                    _buildExportButton(
+                      format: AsistenciaExportFormat.word,
+                      icon: Icons.description_rounded,
+                    ),
+                    _buildExportButton(
+                      format: AsistenciaExportFormat.excel,
+                      icon: Icons.table_view_rounded,
                     ),
                   ],
                 ),

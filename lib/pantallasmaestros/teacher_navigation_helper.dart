@@ -115,11 +115,28 @@ class TeacherNavigationHelper {
     }
   }
 
+  static Future<void> openAttendanceForRepresentative({
+    required BuildContext context,
+    required Grupo representative,
+  }) async {
+    try {
+      await _openAttendanceForGroup(context, representative);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error al abrir pasar lista: $error"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   static Future<void> _openAttendanceForGroup(
     BuildContext context,
     Grupo representative,
   ) async {
-    final alumnos = await ApiService.getAlumnosPorGrupo(representative.id);
+    final alumnos = await ApiService.getAlumnosRegistrados(representative);
 
     if (!context.mounted) return;
 

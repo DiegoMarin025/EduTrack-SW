@@ -20,9 +20,23 @@ function ensureAuxTables() {
         )
     `;
 
+    const createLegacyStudentsTableSql = `
+        CREATE TABLE IF NOT EXISTS alumnos (
+            id INT PRIMARY KEY,
+            nombre VARCHAR(100) NOT NULL,
+            matricula VARCHAR(50) NULL
+        )
+    `;
+
     db.query(createActivitiesTableSql, (err) => {
         if (err) {
             console.error('Error creando tabla calificaciones_actividades:', err);
+        }
+    });
+
+    db.query(createLegacyStudentsTableSql, (err) => {
+        if (err) {
+            console.error('Error creando tabla legacy alumnos:', err);
         }
     });
 }
@@ -42,17 +56,12 @@ const db = mysql.createConnection({
 });
 
 db.connect((err) => {
-<<<<<<< HEAD
-  if (err) console.error('Error al conectar a la DB:', err);
-  else console.log(' Conectado a la base de datos MySQL (EduTrack Final)');
-=======
   if (err) {
     console.error('Error al conectar a la DB:', err);
   } else {
     console.log(' Conectado a la base de datos MySQL (EduTrack Final)');
     ensureAuxTables();
   }
->>>>>>> vista-maestro
 });
 
 // ================= FUNCIÓN AUXILIAR =================
@@ -198,13 +207,17 @@ app.get('/grupos/:clase_id/alumnos', (req, res) => {
     const { clase_id } = req.params;
 
     const sql = `
-        SELECT DISTINCT u.id, u.nombre, u.email AS correo
+        SELECT DISTINCT
+            COALESCE(u.id, a.id) AS id,
+            COALESCE(u.nombre, a.nombre) AS nombre,
+            COALESCE(u.email, CONCAT('alumno', a.id, '@legacy.local')) AS correo
         FROM materias_grupos mg
         JOIN alumnos_grupos ag ON ag.grupo_id = mg.grupo_id
-        JOIN usuarios u ON u.id = ag.alumno_id
+        LEFT JOIN usuarios u ON u.id = ag.alumno_id AND u.rol = 'alumno'
+        LEFT JOIN alumnos a ON a.id = ag.alumno_id
         WHERE mg.id = ?
-          AND u.rol = 'alumno'
-        ORDER BY u.nombre ASC
+          AND (u.id IS NOT NULL OR a.id IS NOT NULL)
+        ORDER BY COALESCE(u.nombre, a.nombre) ASC
     `;
 
     db.query(sql, [clase_id], (err, results) => {
@@ -218,18 +231,19 @@ app.get('/grupos/:clase_id/calificaciones_resumen', (req, res) => {
 
     const sql = `
         SELECT
-            u.id,
-            u.nombre,
-            u.email AS correo,
+            COALESCE(u.id, a.id) AS id,
+            COALESCE(u.nombre, a.nombre) AS nombre,
+            COALESCE(u.email, CONCAT('alumno', a.id, '@legacy.local')) AS correo,
             cf.calificacion AS calificacion_final,
             COALESCE(act.total_actividades, 0) AS total_actividades,
             act.promedio_actividades,
             act.ultimo_comentario
         FROM materias_grupos mg
         JOIN alumnos_grupos ag ON ag.grupo_id = mg.grupo_id
-        JOIN usuarios u ON u.id = ag.alumno_id
+        LEFT JOIN usuarios u ON u.id = ag.alumno_id AND u.rol = 'alumno'
+        LEFT JOIN alumnos a ON a.id = ag.alumno_id
         LEFT JOIN calificaciones_finales cf
-            ON cf.alumno_id = u.id
+            ON cf.alumno_id = ag.alumno_id
             AND cf.materia_id = mg.materia_id
         LEFT JOIN (
             SELECT
@@ -246,10 +260,10 @@ app.get('/grupos/:clase_id/calificaciones_resumen', (req, res) => {
             GROUP BY clase_id, alumno_id
         ) act
             ON act.clase_id = mg.id
-            AND act.alumno_id = u.id
+            AND act.alumno_id = ag.alumno_id
         WHERE mg.id = ?
-          AND u.rol = 'alumno'
-        ORDER BY u.nombre ASC
+          AND (u.id IS NOT NULL OR a.id IS NOT NULL)
+        ORDER BY COALESCE(u.nombre, a.nombre) ASC
     `;
 
     db.query(sql, [clase_id], (err, results) => {

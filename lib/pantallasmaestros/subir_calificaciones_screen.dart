@@ -65,17 +65,24 @@ class _SubirCalificacionesScreenState extends State<SubirCalificacionesScreen> {
     }
   }
 
-  Future<void> _fetchLibro(int grupoId) async {
+  Future<void> _fetchLibro(Grupo grupo) async {
     setState(() => _loading = true);
     _disposeRowControllers();
 
     try {
-      final rows = await ApiService.getCalificacionesResumen(grupoId);
+      List<CalificacionesResumenAlumno> rows = [];
+      try {
+        rows = await ApiService.getCalificacionesResumen(grupo.id);
+      } catch (_) {
+        rows = [];
+      }
+
+      final alumnos = await ApiService.getAlumnosRegistrados(grupo);
       if (!mounted) return;
 
       setState(() {
-        _rows = rows;
-        for (final row in rows) {
+        _rows = _mergeRowsWithRegisteredStudents(rows, alumnos);
+        for (final row in _rows) {
           _gradeControllers[row.id] = TextEditingController(
             text: _formatEditableGrade(row.calificacionFinal),
           );
@@ -112,7 +119,7 @@ class _SubirCalificacionesScreenState extends State<SubirCalificacionesScreen> {
     final rawValue = _gradeControllers[alumno.id]?.text.trim() ?? '';
     if (rawValue.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingresa una calificación primero')),
+        const SnackBar(content: Text('Ingresa una calificacion primero')),
       );
       return;
     }
@@ -120,7 +127,7 @@ class _SubirCalificacionesScreenState extends State<SubirCalificacionesScreen> {
     final calificacion = double.tryParse(rawValue);
     if (calificacion == null || calificacion < 0 || calificacion > 10) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('La calificación debe estar entre 0 y 10')),
+        const SnackBar(content: Text('La calificacion debe estar entre 0 y 10')),
       );
       return;
     }
@@ -141,7 +148,7 @@ class _SubirCalificacionesScreenState extends State<SubirCalificacionesScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Calificación final guardada para ${alumno.nombre}.'),
+          content: Text('Calificacion final guardada para ${alumno.nombre}.'),
           backgroundColor: Colors.green,
         ),
       );
@@ -174,7 +181,7 @@ class _SubirCalificacionesScreenState extends State<SubirCalificacionesScreen> {
         grupo: grupo,
         alumno: alumno,
         onChanged: () {
-          _fetchLibro(grupo.id);
+          _fetchLibro(grupo);
         },
       ),
     );
@@ -239,7 +246,7 @@ class _SubirCalificacionesScreenState extends State<SubirCalificacionesScreen> {
                             (item) => item.id == id,
                           );
                           setState(() => _selectedGrupo = grupo);
-                          _fetchLibro(id);
+                          _fetchLibro(grupo);
                         },
                       ),
                     ),
@@ -275,12 +282,12 @@ class _SubirCalificacionesScreenState extends State<SubirCalificacionesScreen> {
                     icon: Icons.table_chart_rounded,
                     label: '${_rows.length} alumnos',
                   ),
-                  _InfoPill(
-                    icon: Icons.assignment_rounded,
-                    label: _selectedGrupo == null
-                        ? 'Sin clase seleccionada'
-                        : '${_selectedGrupo!.nombre} • ${_selectedGrupo!.materia}',
-                  ),
+                    _InfoPill(
+                      icon: Icons.assignment_rounded,
+                      label: _selectedGrupo == null
+                          ? 'Sin clase seleccionada'
+                          : '${_selectedGrupo!.nombre} - ${_selectedGrupo!.materia}',
+                    ),
                   const _InfoPill(
                     icon: Icons.touch_app_rounded,
                     label: 'Toca el nombre para actividades y comentarios',
@@ -297,13 +304,13 @@ class _SubirCalificacionesScreenState extends State<SubirCalificacionesScreen> {
                     ? const _EmptyState(
                         title: 'Selecciona una clase',
                         subtitle:
-                            'Cuando elijas una materia aparecerá el libro tipo tabla para capturar y editar calificaciones.',
+                            'Cuando elijas una materia aparecera el libro tipo tabla para capturar y editar calificaciones.',
                       )
                     : _filteredRows.isEmpty
                     ? const _EmptyState(
-                        title: 'No hay alumnos en esta clase',
+                        title: 'No hay alumnos para mostrar',
                         subtitle:
-                            'Agrega alumnos al grupo para empezar a capturar actividades y calificaciones.',
+                            'Agrega alumnos al grupo o limpia la busqueda para revisar el listado completo.',
                       )
                     : _buildGradeTable(primaryBlue),
               ),
@@ -482,6 +489,36 @@ class _SubirCalificacionesScreenState extends State<SubirCalificacionesScreen> {
     if (value % 1 == 0) return value.toStringAsFixed(0);
     return value.toStringAsFixed(1);
   }
+
+  List<CalificacionesResumenAlumno> _mergeRowsWithRegisteredStudents(
+    List<CalificacionesResumenAlumno> rows,
+    List<Alumno> alumnos,
+  ) {
+    final byId = {
+      for (final row in rows) row.id: row,
+    };
+
+    for (final alumno in alumnos) {
+      byId.putIfAbsent(
+        alumno.id,
+        () => CalificacionesResumenAlumno(
+          id: alumno.id,
+          nombre: alumno.nombre,
+          correo: alumno.correo,
+          calificacionFinal: null,
+          totalActividades: 0,
+          promedioActividades: null,
+          ultimoComentario: '',
+        ),
+      );
+    }
+
+    final merged = byId.values.toList();
+    merged.sort(
+      (a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()),
+    );
+    return merged;
+  }
 }
 
 class _AlumnoActividadSheet extends StatefulWidget {
@@ -553,14 +590,14 @@ class _AlumnoActividadSheetState extends State<_AlumnoActividadSheet> {
 
     if (calificacion == null && gradeText.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('La calificación debe ser un número')),
+        const SnackBar(content: Text('La calificacion debe ser un numero')),
       );
       return;
     }
 
     if (calificacion != null && (calificacion < 0 || calificacion > 10)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('La calificación debe estar entre 0 y 10')),
+        const SnackBar(content: Text('La calificacion debe estar entre 0 y 10')),
       );
       return;
     }
@@ -568,7 +605,7 @@ class _AlumnoActividadSheetState extends State<_AlumnoActividadSheet> {
     if (comentario.isEmpty && calificacion == null && titulo.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Agrega una actividad, una calificación o un comentario'),
+          content: Text('Agrega una actividad, una calificacion o un comentario'),
         ),
       );
       return;
@@ -662,7 +699,7 @@ class _AlumnoActividadSheetState extends State<_AlumnoActividadSheet> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '${widget.grupo.nombre} • ${widget.grupo.materia}',
+                            '${widget.grupo.nombre} - ${widget.grupo.materia}',
                             style: const TextStyle(color: Color(0xFF64748B)),
                           ),
                         ],
@@ -715,7 +752,7 @@ class _AlumnoActividadSheetState extends State<_AlumnoActividadSheet> {
                         controller: _tituloController,
                         decoration: const InputDecoration(
                           labelText: 'Actividad',
-                          hintText: 'Ej. Tarea 2, exposición, seguimiento',
+                          hintText: 'Ej. Tarea 2, exposicion, seguimiento',
                           border: OutlineInputBorder(),
                         ),
                       ),
@@ -730,7 +767,7 @@ class _AlumnoActividadSheetState extends State<_AlumnoActividadSheet> {
                                 decimal: true,
                               ),
                               decoration: const InputDecoration(
-                                labelText: 'Calificación',
+                                labelText: 'Calificacion',
                                 hintText: '0 - 10',
                                 border: OutlineInputBorder(),
                               ),
@@ -753,7 +790,7 @@ class _AlumnoActividadSheetState extends State<_AlumnoActividadSheet> {
                         decoration: const InputDecoration(
                           labelText: 'Reporte o comentario',
                           hintText:
-                              'Ej. Participó muy bien, entregar evidencia pendiente, necesita reforzar tema 3.',
+                              'Ej. Participo muy bien, entregar evidencia pendiente, necesita reforzar tema 3.',
                           border: OutlineInputBorder(),
                         ),
                       ),
@@ -809,9 +846,9 @@ class _AlumnoActividadSheetState extends State<_AlumnoActividadSheet> {
                         )
                       : _actividades.isEmpty
                       ? const _EmptyState(
-                          title: 'Sin movimientos todavía',
+                          title: 'Sin movimientos todavia',
                           subtitle:
-                              'Aquí aparecerán las actividades, calificaciones extra y comentarios registrados para este alumno.',
+                              'Aqui apareceran las actividades, calificaciones extra y comentarios registrados para este alumno.',
                         )
                       : ListView.separated(
                           itemCount: _actividades.length,
@@ -900,7 +937,7 @@ class _AlumnoActividadSheetState extends State<_AlumnoActividadSheet> {
     final day = parsed.day.toString().padLeft(2, '0');
     final hour = parsed.hour.toString().padLeft(2, '0');
     final minute = parsed.minute.toString().padLeft(2, '0');
-    return '$day/$month/${parsed.year} • $hour:$minute';
+    return '$day/$month/${parsed.year} - $hour:$minute';
   }
 }
 

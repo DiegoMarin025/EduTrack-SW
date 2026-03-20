@@ -24,7 +24,7 @@ class _DetalleGrupoScreenState extends State<DetalleGrupoScreen> {
 
   Future<void> _cargarAlumnos() async {
     try {
-      final alumnos = await ApiService.getAlumnosPorGrupo(widget.grupo.id);
+      final alumnos = await ApiService.getAlumnosRegistrados(widget.grupo);
 
       if (mounted) {
         setState(() {
@@ -33,7 +33,14 @@ class _DetalleGrupoScreenState extends State<DetalleGrupoScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _loading = false);
+      if (!mounted) return;
+      setState(() {
+        _alumnos = [];
+        _loading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error cargando alumnos: $e")),
+      );
     }
   }
 
@@ -96,7 +103,7 @@ class _DetalleGrupoScreenState extends State<DetalleGrupoScreen> {
 
                 if (mounted) {
                   Navigator.pop(context);
-                  _cargarAlumnos();
+                  await _cargarAlumnos();
 
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
