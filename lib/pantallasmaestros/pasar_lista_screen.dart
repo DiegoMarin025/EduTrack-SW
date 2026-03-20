@@ -83,10 +83,6 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
     setState(() => _saving = true);
 
     try {
-      // ✅ Por ahora: solo confirmamos y dejamos listo para backend.
-      // Cuando tengas endpoint, aquí mandamos:
-      // await ApiService.guardarAsistencia(...)
-
       // Simulación breve (para que se sienta “real”)
       await Future.delayed(const Duration(milliseconds: 700));
 
