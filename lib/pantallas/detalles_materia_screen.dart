@@ -52,7 +52,7 @@ class DetallesMateriaScreen extends StatelessWidget {
               // Lista de Evaluaciones
               ...materia.evaluaciones.map((evaluacion) {
                 return _buildEvaluacionRow(evaluacion);
-              }).toList(),
+              }),
 
               const SizedBox(height: 20),
               _buildPonderacionTotal(materia.evaluaciones),

@@ -48,6 +48,60 @@ Widget tutorSectionTitle(String text) {
   );
 }
 
+Widget tutorEmptyStateCard({
+  required IconData icon,
+  required String title,
+  required String message,
+}) {
+  return Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(18),
+    decoration: tutorSurfaceDecoration(
+      color: const Color(0xFFF8FAFC),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: TutorPalette.primaryBlue.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Icon(icon, color: TutorPalette.primaryBlue, size: 24),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.w900,
+                  color: TutorPalette.textDark,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: TutorPalette.textSoft,
+                  height: 1.45,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 class TutorPageHeader extends StatelessWidget {
   final IconData icon;
   final String title;

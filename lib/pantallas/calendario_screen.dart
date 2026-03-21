@@ -39,7 +39,7 @@ class _CalendarioScreenState extends State<CalendarioScreen>
     with SingleTickerProviderStateMixin {
   late DateTime _focusedDay;
   late DateTime _selectedDay;
-  CalendarFormat _calendarFormat = CalendarFormat.month;
+  final CalendarFormat _calendarFormat = CalendarFormat.month;
 
   final Color purpleDeep = const Color(0xFF6A0DAD);
   final Color purpleMedium = const Color(0xFF9B4F96);
@@ -268,8 +268,9 @@ class _CalendarioScreenState extends State<CalendarioScreen>
                           ),
                           calendarBuilders: CalendarBuilders(
                             markerBuilder: (context, date, events) {
-                              if (events.isEmpty)
+                              if (events.isEmpty) {
                                 return const SizedBox.shrink();
+                              }
                               return Align(
                                 alignment: Alignment.bottomCenter,
                                 child: _buildEventMarker(date, events),
@@ -298,7 +299,7 @@ class _CalendarioScreenState extends State<CalendarioScreen>
                         .asMap()
                         .entries
                         .map((e) => _buildAgendaCard(e.value, e.key))
-                        .toList(),
+                        ,
 
                     const SizedBox(height: 30),
                   ],

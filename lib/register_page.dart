@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class RegisterPage extends StatefulWidget {
+  const RegisterPage({super.key});
+
   @override
   _RegisterPageState createState() => _RegisterPageState();
 }
@@ -14,7 +16,6 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
-  final TextEditingController _matriculaHijoController = TextEditingController();
 
   String _rolSeleccionado = 'tutor'; 
   bool _isLoading = false;
@@ -36,10 +37,6 @@ class _RegisterPageState extends State<RegisterPage> {
           'password': _passwordController.text.trim(),
           'rol': rolParaBD,
         };
-
-        if (_rolSeleccionado == 'tutor') {
-          requestBody['matricula_hijo'] = _matriculaHijoController.text.trim();
-        }
 
         final response = await http.post(
           Uri.parse('http://localhost:3000/register'), 
@@ -112,7 +109,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
                         // Selector de Rol
                         DropdownButtonFormField<String>(
-                          value: _rolSeleccionado,
+                          initialValue: _rolSeleccionado,
                           decoration: InputDecoration(
                             labelText: '¿Quién eres?',
                             prefixIcon: Icon(Icons.people_alt_outlined, color: Colors.blue[900]),
@@ -130,16 +127,6 @@ class _RegisterPageState extends State<RegisterPage> {
                         SizedBox(height: 20),
                         _buildTextField(controller: _emailController, label: 'Correo Electrónico', icon: Icons.email_outlined),
                         SizedBox(height: 20),
-
-                        if (_rolSeleccionado == 'tutor') ...[
-                          _buildTextField(
-                            controller: _matriculaHijoController,
-                            label: 'Matrícula del Hijo',
-                            icon: Icons.badge_outlined,
-                            hint: 'Ej. 202300456',
-                          ),
-                          SizedBox(height: 20),
-                        ],
 
                         _buildPasswordField(
                           controller: _passwordController,

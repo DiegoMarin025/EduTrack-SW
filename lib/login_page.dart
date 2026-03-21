@@ -10,6 +10,8 @@ import 'register_page.dart';
 import 'pantallasmaestros/main_layout_maestros_screen.dart'; 
 
 class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
   @override
   _LoginPageState createState() => _LoginPageState();
 }
@@ -51,6 +53,13 @@ class _LoginPageState extends State<LoginPage> {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setInt('userId', userId);
           await prefs.setString('rol', rolEnBD);
+          await prefs.setInt('saved_id', userId);
+          await prefs.setString('saved_name', nombreUsuario);
+          await prefs.setString(
+            'saved_username',
+            _emailController.text.trim(),
+          );
+          await prefs.setString('saved_userType', rolEnBD);
 
           if (rolEnBD == 'alumno' || rolEnBD == 'tutor') {
             // REDIRECCIÓN A TUTORES

@@ -5,6 +5,7 @@ import 'tutor_activities_screen.dart';
 import 'tutor_attendance_screen.dart';
 import 'tutor_demo_data.dart';
 import 'tutor_grades_screen.dart';
+import 'tutor_live_data_service.dart';
 import 'tutor_ui.dart';
 
 class TutorDashboard extends StatefulWidget {
@@ -22,12 +23,36 @@ class TutorDashboard extends StatefulWidget {
 }
 
 class _TutorDashboardState extends State<TutorDashboard> {
-  late final TutorStudentSnapshot _snapshot;
+  late TutorStudentSnapshot _snapshot;
+  bool _syncing = false;
 
   @override
   void initState() {
     super.initState();
+    // Fallback inicial: evita una pantalla vacia mientras cargan datos reales.
     _snapshot = buildTutorDemoData(tutorName: widget.username);
+    _loadSnapshot();
+  }
+
+  Future<void> _loadSnapshot() async {
+    setState(() => _syncing = true);
+
+    // Punto principal de integracion para la vista tutor/alumno.
+    // Si despues se migra todo a Firebase, esta llamada puede seguir existiendo
+    // como fachada y cambiarse solo la implementacion interna del servicio.
+    final loaded = await TutorLiveDataService.loadSnapshot(
+      alumnoId: widget.userId,
+      tutorName: widget.username,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _snapshot = loaded;
+      _syncing = false;
+    });
   }
 
   @override
@@ -164,11 +189,20 @@ class _TutorDashboardState extends State<TutorDashboard> {
         const SizedBox(height: 10),
         IconButton(
           tooltip: "Actualizar",
-          onPressed: () => setState(() {}),
-          icon: const Icon(
-            Icons.refresh_rounded,
-            color: TutorPalette.primaryBlue,
-          ),
+          onPressed: _syncing ? null : _loadSnapshot,
+          icon: _syncing
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: TutorPalette.primaryBlue,
+                  ),
+                )
+              : const Icon(
+                  Icons.refresh_rounded,
+                  color: TutorPalette.primaryBlue,
+                ),
         ),
       ],
     );
@@ -335,6 +369,8 @@ class _TutorDashboardState extends State<TutorDashboard> {
   }
 
   Widget _buildSummaryGrid(bool isWebWide, bool isTablet) {
+    // Estas tarjetas ya leen del snapshot final. Si aparecen nuevos campos reales
+    // de tutor (por ejemplo faltas justificadas, tutor titular, etc.), agregarlos aqui.
     final items = [
       _DashboardMetric(
         value: _snapshot.generalAverage.toStringAsFixed(1),
@@ -432,7 +468,10 @@ class _TutorDashboardState extends State<TutorDashboard> {
         icon: Icons.approval_rounded,
         tint: TutorPalette.violet,
         onTap: () => _openScreen(
-          TutorAbsenceJustificationScreen(snapshot: _snapshot),
+          TutorAbsenceJustificationScreen(
+            snapshot: _snapshot,
+            userId: widget.userId,
+          ),
         ),
       ),
     ];
@@ -452,6 +491,18 @@ class _TutorDashboardState extends State<TutorDashboard> {
   }
 
   Widget _buildCommentsList() {
+    // Comentarios del maestro: hoy salen del historial/fallback.
+    // Cuando exista una coleccion real de mensajes docente->tutor, reemplazar
+    // _snapshot.comments sin tocar este render.
+    if (_snapshot.comments.isEmpty) {
+      return tutorEmptyStateCard(
+        icon: Icons.chat_bubble_outline_rounded,
+        title: "Aqui apareceran los comentarios del maestro",
+        message:
+            "Cuando se vincule al alumno y existan mensajes docentes, se mostraran en esta seccion.",
+      );
+    }
+
     return Column(
       children: _snapshot.comments.map((comment) {
         return Padding(
@@ -480,6 +531,17 @@ class _TutorDashboardState extends State<TutorDashboard> {
   }
 
   Widget _buildReportsList() {
+    // Reportes registrados: hoy se alimentan de notificaciones o demo.
+    // Si mas adelante hay una coleccion "reportes" en Firebase, mapearla al snapshot.
+    if (_snapshot.reports.isEmpty) {
+      return tutorEmptyStateCard(
+        icon: Icons.description_outlined,
+        title: "Aqui apareceran los reportes registrados",
+        message:
+            "Esta seccion mostrara reportes academicos y de seguimiento cuando haya informacion disponible.",
+      );
+    }
+
     return Column(
       children: _snapshot.reports.map((report) {
         final statusColor = tutorStatusColor(report.status);

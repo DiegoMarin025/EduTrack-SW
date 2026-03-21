@@ -46,7 +46,7 @@ class _TeacherGradeInputScreenState extends State<TeacherGradeInputScreen> {
   // -----------------------------------------------------------------
   Estudiante? _estudianteSeleccionado;
   String? _materiaSeleccionada;
-  List<EvaluacionInput> _evaluaciones = [];
+  final List<EvaluacionInput> _evaluaciones = [];
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   @override

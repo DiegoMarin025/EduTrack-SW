@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 
 import 'tutor_demo_data.dart';
+import 'tutor_live_data_service.dart';
 import 'tutor_ui.dart';
 
 class TutorAbsenceJustificationScreen extends StatefulWidget {
   final TutorStudentSnapshot snapshot;
+  final int userId;
 
   const TutorAbsenceJustificationScreen({
     super.key,
     required this.snapshot,
+    required this.userId,
   });
 
   @override
@@ -28,6 +31,8 @@ class _TutorAbsenceJustificationScreenState
   @override
   void initState() {
     super.initState();
+    // Fuente temporal: las justificaciones viven hoy en el snapshot local.
+    // Cuando exista origen real, precargar _records desde backend/Firebase aqui.
     _records = List<TutorJustificationRecord>.from(
       widget.snapshot.justifications,
     );
@@ -243,6 +248,17 @@ class _TutorAbsenceJustificationScreenState
   }
 
   Widget _buildFormCard() {
+    // El formulario ya esta listo para trabajar con datos reales.
+    // La parte que falta conectar de verdad es el guardado/actualizacion del documento.
+    if (_records.isEmpty) {
+      return tutorEmptyStateCard(
+        icon: Icons.approval_rounded,
+        title: "Aqui podras justificar faltas",
+        message:
+            "Cuando existan faltas registradas del alumno, este formulario permitira enviar la aclaracion correspondiente.",
+      );
+    }
+
     final dropdownItems = List.generate(_records.length, (index) {
       final record = _records[index];
       return DropdownMenuItem<int>(
@@ -278,7 +294,7 @@ class _TutorAbsenceJustificationScreenState
             ),
             const SizedBox(height: 14),
             DropdownButtonFormField<int>(
-              value: _selectedIndex,
+              initialValue: _selectedIndex,
               items: dropdownItems,
               onChanged: (value) {
                 setState(() {
@@ -382,6 +398,15 @@ class _TutorAbsenceJustificationScreenState
   }
 
   Widget _buildHistoryList() {
+    if (_records.isEmpty) {
+      return tutorEmptyStateCard(
+        icon: Icons.event_busy_rounded,
+        title: "Aqui apareceran las faltas registradas",
+        message:
+            "Esta seccion mostrara las inasistencias y su estatus de revision cuando haya informacion disponible.",
+      );
+    }
+
     return Column(
       children: List.generate(_records.length, (index) {
         final record = _records[index];
@@ -484,22 +509,43 @@ class _TutorAbsenceJustificationScreenState
     );
   }
 
-  void _submitJustification() {
+  Future<void> _submitJustification() async {
     if (!_formKey.currentState!.validate() || _selectedIndex == null) {
       return;
     }
 
+    // Estado optimista local: mantiene la interfaz util aunque el backend tutor
+    // aun no tenga una coleccion propia de justificaciones.
+    final updatedRecord = _records[_selectedIndex!].copyWith(
+      reason: _reasonController.text.trim(),
+      detail: _detailController.text.trim(),
+      status: "En revision",
+    );
+
+    final sent = await TutorLiveDataService.submitAbsenceJustification(
+      usuarioId: widget.userId,
+      record: updatedRecord,
+      reason: _reasonController.text.trim(),
+      detail: _detailController.text.trim(),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
-      _records[_selectedIndex!] = _records[_selectedIndex!].copyWith(
-        reason: _reasonController.text.trim(),
-        detail: _detailController.text.trim(),
-        status: "En revision",
-      );
+      _records[_selectedIndex!] = updatedRecord;
     });
 
+    // Cuando haya persistencia real de justificaciones, aqui convendria tambien
+    // recargar desde backend/Firebase para reflejar ids, archivos y estatus finales.
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("La justificacion se marco como enviada para revision."),
+      SnackBar(
+        content: Text(
+          sent
+              ? "La justificacion se envio al backend actual para revision."
+              : "La justificacion se guardo localmente mientras se completa la migracion.",
+        ),
         behavior: SnackBarBehavior.floating,
       ),
     );

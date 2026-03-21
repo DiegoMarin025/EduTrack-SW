@@ -20,10 +20,29 @@ const db = mysql.createConnection({
 
 db.connect((err) => {
   if (err) console.error('Error al conectar a la DB:', err);
-  else console.log(' Conectado a la base de datos MySQL (EduTrack Final)');
+  else {
+    console.log(' Conectado a la base de datos MySQL (EduTrack Final)');
+    asegurarRolTutor();
+  }
 });
 
 // ================= FUNCIÓN AUXILIAR =================
+function asegurarRolTutor() {
+    const sql = `
+        ALTER TABLE usuarios
+        MODIFY COLUMN rol ENUM('alumno','profesor','tutor','admin')
+        NOT NULL DEFAULT 'alumno'
+    `;
+
+    db.query(sql, (err) => {
+        if (err) {
+            console.error("Error asegurando rol 'tutor' en usuarios:", err.message);
+            return;
+        }
+        console.log("Rol 'tutor' habilitado en usuarios.");
+    });
+}
+
 function crearNotificacion(uid, titulo, mensaje) {
     const sql = 'INSERT INTO notificaciones (usuario_id, titulo, mensaje, fecha) VALUES (?, ?, ?, NOW())';
     db.query(sql, [uid, titulo, mensaje], (err) => {
@@ -206,36 +225,21 @@ app.get('/notificaciones/:usuario_id', (req, res) => {
     });
 });
 
-// 6. REGISTRO ACTUALIZADO PARA TUTOR (REQUERIMIENTO 3.1)
+// 6. REGISTRO
 app.post('/register', (req, res) => {
-    const { nombre, email, password, rol, matricula_hijo } = req.body;
+    const { nombre, email, password, rol } = req.body;
 
-    // Si el que se registra es un tutor, verificamos la matrícula del hijo primero
-    if (rol === 'tutor') {
-        const checkSql = 'SELECT id FROM usuarios WHERE id = ? AND rol = "alumno"';
-        db.query(checkSql, [matricula_hijo], (err, results) => {
-            if (err) return res.status(500).json({ error: err.message });
-            
-            if (results.length === 0) {
-                return res.status(400).json({ error: 'Seguridad: La matrícula del hijo no existe.' });
-            }
+    const sql = 'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, ?)';
+    db.query(sql, [nombre, email, password, rol], (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
 
-            // Si existe, procedemos a insertar al tutor
-            const sqlInsert = 'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, ?)';
-            db.query(sqlInsert, [nombre, email, password, rol], (err, result) => {
-                if (err) return res.status(500).json({ error: err.message });
-                crearNotificacion(result.insertId, 'Bienvenido Tutor', 'Tu cuenta ha sido vinculada correctamente.');
-                res.status(201).json({ message: 'Tutor registrado exitosamente', id: result.insertId });
-            });
-        });
-    } else {
-        // Registro normal para otros roles
-        const sql = 'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, ?)';
-        db.query(sql, [nombre, email, password, rol], (err, result) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.status(201).json({ message: 'Registrado exitosamente', id: result.insertId });
-        });
-    }
+        if (rol === 'tutor') {
+            crearNotificacion(result.insertId, 'Bienvenido Tutor', 'Tu cuenta ha sido creada correctamente.');
+            return res.status(201).json({ message: 'Tutor registrado exitosamente', id: result.insertId });
+        }
+
+        res.status(201).json({ message: 'Registrado exitosamente', id: result.insertId });
+    });
 });
 
 // Mantén el resto de tus rutas (login, grupos, etc.) igual que antes...

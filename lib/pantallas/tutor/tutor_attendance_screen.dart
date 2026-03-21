@@ -65,6 +65,8 @@ class TutorAttendanceScreen extends StatelessWidget {
   }
 
   Widget _attendanceChip() {
+    // Este contador depende hoy del fallback de justificaciones.
+    // Cuando exista asistencia real por alumno, el snapshot debe llenar este valor.
     return TutorStatusBadge(
       text: "${snapshot.pendingJustificationsCount} por justificar",
       color: TutorPalette.warning,
@@ -175,6 +177,8 @@ class TutorAttendanceScreen extends StatelessWidget {
   }
 
   Widget _buildMetricsGrid(bool isWebWide, bool isTablet) {
+    // Totales y porcentaje todavia dependen del snapshot temporal.
+    // Con Firebase se espera mapear asistencia/{fecha}/{alumnoId} hacia estos campos.
     final metrics = [
       TutorMetricCard(
         value: "${snapshot.totalAssistances}",
@@ -214,6 +218,17 @@ class TutorAttendanceScreen extends StatelessWidget {
   }
 
   Widget _buildHistoryList() {
+    // Historial por fecha: hoy es demo/fallback.
+    // Cuando llegue la coleccion real, solo hay que reemplazar snapshot.attendanceHistory.
+    if (snapshot.attendanceHistory.isEmpty) {
+      return tutorEmptyStateCard(
+        icon: Icons.calendar_month_rounded,
+        title: "Aqui aparecera el historial de asistencia",
+        message:
+            "Cuando existan registros reales, veras asistencias, retardos y faltas por fecha en esta seccion.",
+      );
+    }
+
     return Column(
       children: snapshot.attendanceHistory.map((record) {
         final color = tutorStatusColor(record.status);

@@ -195,8 +195,8 @@ class _HistorialAcademicoScreenState extends State<HistorialAcademicoScreen> {
           widget.onNavigate(3);
         },
         backgroundColor: Colors.orange,
-        child: const Icon(Icons.support_agent, color: Colors.white),
         tooltip: 'Contactar Soporte',
+        child: const Icon(Icons.support_agent, color: Colors.white),
       ),
     );
   }

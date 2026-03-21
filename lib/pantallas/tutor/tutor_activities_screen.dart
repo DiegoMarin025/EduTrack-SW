@@ -171,6 +171,9 @@ class TutorActivitiesScreen extends StatelessWidget {
   }
 
   Widget _buildMetricsGrid(bool isWebWide, bool isTablet) {
+    // Estos contadores ya salen del snapshot.
+    // Si despues se conecta una coleccion real de actividades, mantener esta UI
+    // y actualizar solo el origen de snapshot.activities.
     final metrics = [
       TutorMetricCard(
         value: "${snapshot.assignedActivities}",
@@ -210,6 +213,17 @@ class TutorActivitiesScreen extends StatelessWidget {
   }
 
   Widget _buildActivitiesList() {
+    // Lista temporal: hoy mezcla actividades demo y evaluaciones convertidas a tareas.
+    // El punto correcto para cambiar la logica esta en TutorLiveDataService._buildActivities.
+    if (snapshot.activities.isEmpty) {
+      return tutorEmptyStateCard(
+        icon: Icons.assignment_rounded,
+        title: "Aqui apareceran las actividades",
+        message:
+            "Esta seccion mostrara tareas, entregas y fechas limite cuando el backend tenga actividades reales.",
+      );
+    }
+
     return Column(
       children: snapshot.activities.map((activity) {
         final statusColor = tutorStatusColor(activity.status);

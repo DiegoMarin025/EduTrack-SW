@@ -100,6 +100,7 @@ class TutorGradesScreen extends StatelessWidget {
 
   Widget _buildHeroCard(bool isTablet) {
     final best = snapshot.strongestSubject;
+    final hasGrades = snapshot.grades.isNotEmpty;
 
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -141,7 +142,9 @@ class TutorGradesScreen extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Text(
-          "La materia mas fuerte actualmente es ${best.subjectName.toLowerCase()} con ${best.average.toStringAsFixed(1)}.",
+          hasGrades
+              ? "La materia mas fuerte actualmente es ${best.subjectName.toLowerCase()} con ${best.average.toStringAsFixed(1)}."
+              : "Aqui se mostrara el resumen academico cuando existan materias y calificaciones vinculadas.",
           style: const TextStyle(
             color: Colors.white70,
             fontSize: 13,
@@ -169,7 +172,7 @@ class TutorGradesScreen extends StatelessWidget {
         ),
         _heroPill(
           icon: Icons.trending_up_rounded,
-          title: best.average.toStringAsFixed(1),
+          title: hasGrades ? best.average.toStringAsFixed(1) : "--",
           subtitle: "Mejor promedio",
         ),
       ],
@@ -214,6 +217,9 @@ class TutorGradesScreen extends StatelessWidget {
   }
 
   Widget _buildMetricsGrid(bool isWebWide, bool isTablet) {
+    // "3 parciales" es el contrato visual actual.
+    // Si el nuevo backend/Firebase trae 2, 4 o N parciales, ajustar aqui el resumen
+    // y tambien la forma en que se arma snapshot.grades.
     final metrics = [
       TutorMetricCard(
         value: snapshot.generalAverage.toStringAsFixed(1),
@@ -253,6 +259,18 @@ class TutorGradesScreen extends StatelessWidget {
   }
 
   Widget _buildSubjectCards() {
+    // Esta vista ya consume datos normalizados del snapshot.
+    // La siguiente persona solo necesita cambiar la construccion del snapshot
+    // si quiere parciales/comentarios reales; no hace falta redisenar esta UI.
+    if (snapshot.grades.isEmpty) {
+      return tutorEmptyStateCard(
+        icon: Icons.grade_rounded,
+        title: "Aqui apareceran las calificaciones",
+        message:
+            "Cuando el alumno tenga materias y evaluaciones vinculadas, se mostraran el promedio, parciales y comentarios del maestro.",
+      );
+    }
+
     return Column(
       children: snapshot.grades.map((subject) {
         final statusColor = subject.average >= 9

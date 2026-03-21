@@ -35,8 +35,9 @@ class _DialogCrearClaseState extends State<DialogCrearClase> {
   }
 
   Future<void> _crear() async {
-    if (_selectedGrupoId == null || _materiaController.text.trim().isEmpty)
+    if (_selectedGrupoId == null || _materiaController.text.trim().isEmpty) {
       return;
+    }
 
     setState(() => _loadingAction = true);
     try {
