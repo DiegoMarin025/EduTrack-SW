@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'tutor_demo_data.dart';
 import 'tutor_ui.dart';
 
-class TutorGradesScreen extends StatelessWidget {
+class TutorActivitiesScreen extends StatelessWidget {
   final TutorStudentSnapshot snapshot;
 
-  const TutorGradesScreen({
+  const TutorActivitiesScreen({
     super.key,
     required this.snapshot,
   });
@@ -20,7 +20,7 @@ class TutorGradesScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: TutorPalette.bgLight,
       appBar: AppBar(
-        title: const Text("Calificaciones"),
+        title: const Text("Actividades"),
         backgroundColor: TutorPalette.darkBlue,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -41,20 +41,23 @@ class TutorGradesScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   TutorPageHeader(
-                    icon: Icons.grade_rounded,
-                    title: "Calificaciones de ${snapshot.studentName}",
+                    icon: Icons.assignment_rounded,
+                    title: "Actividades de ${snapshot.studentName}",
                     subtitle:
-                        "Consulta promedio general, promedio por materia y desglose por parcial.",
-                    trailing: _dateChip(),
+                        "Revisa las actividades asignadas, su materia y la fecha de entrega.",
+                    trailing: TutorStatusBadge(
+                      text: "${snapshot.pendingActivitiesCount} pendientes",
+                      color: TutorPalette.warning,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   _buildHeroCard(isTablet),
                   const SizedBox(height: 16),
                   _buildMetricsGrid(isWebWide, isTablet),
                   const SizedBox(height: 18),
-                  tutorSectionTitle("Promedio por materia"),
+                  tutorSectionTitle("Lista de actividades"),
                   const SizedBox(height: 12),
-                  _buildSubjectCards(),
+                  _buildActivitiesList(),
                 ],
               ),
             ),
@@ -64,43 +67,7 @@ class TutorGradesScreen extends StatelessWidget {
     );
   }
 
-  Widget _dateChip() {
-    final now = DateTime.now();
-    final text =
-        "${tutorWeekdayEs(now.weekday)} ${now.day} ${tutorMonthEs(now.month)}";
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: TutorPalette.border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.calendar_month_rounded,
-            size: 18,
-            color: TutorPalette.primaryBlue,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF334155),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildHeroCard(bool isTablet) {
-    final best = snapshot.strongestSubject;
-
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -111,7 +78,7 @@ class TutorGradesScreen extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
           ),
           child: const Text(
-            "RESUMEN ACADEMICO",
+            "SEGUIMIENTO DE TAREAS",
             style: TextStyle(
               color: Colors.white,
               fontSize: 11,
@@ -121,17 +88,8 @@ class TutorGradesScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        const Text(
-          "Promedio general",
-          style: TextStyle(
-            color: Colors.white70,
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 6),
         Text(
-          snapshot.generalAverage.toStringAsFixed(1),
+          "${snapshot.assignedActivities}",
           style: const TextStyle(
             color: Colors.white,
             fontSize: 42,
@@ -140,9 +98,9 @@ class TutorGradesScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        Text(
-          "La materia mas fuerte actualmente es ${best.subjectName.toLowerCase()} con ${best.average.toStringAsFixed(1)}.",
-          style: const TextStyle(
+        const Text(
+          "Total de actividades asignadas para el periodo actual con control de estatus.",
+          style: TextStyle(
             color: Colors.white70,
             fontSize: 13,
             fontWeight: FontWeight.w600,
@@ -155,22 +113,21 @@ class TutorGradesScreen extends StatelessWidget {
     final pills = Wrap(
       spacing: 10,
       runSpacing: 10,
-      alignment: WrapAlignment.end,
       children: [
         _heroPill(
-          icon: Icons.menu_book_rounded,
-          title: "${snapshot.grades.length}",
-          subtitle: "Materias",
+          icon: Icons.pending_actions_rounded,
+          title: "${snapshot.pendingActivitiesCount}",
+          subtitle: "Pendientes",
         ),
         _heroPill(
           icon: Icons.check_circle_rounded,
-          title: _approvedCount().toString(),
-          subtitle: "Aprobadas",
+          title: "${snapshot.deliveredActivitiesCount}",
+          subtitle: "Entregadas",
         ),
         _heroPill(
-          icon: Icons.trending_up_rounded,
-          title: best.average.toStringAsFixed(1),
-          subtitle: "Mejor promedio",
+          icon: Icons.class_rounded,
+          title: "${snapshot.grades.length}",
+          subtitle: "Materias",
         ),
       ],
     );
@@ -216,25 +173,25 @@ class TutorGradesScreen extends StatelessWidget {
   Widget _buildMetricsGrid(bool isWebWide, bool isTablet) {
     final metrics = [
       TutorMetricCard(
-        value: snapshot.generalAverage.toStringAsFixed(1),
-        label: "Promedio general",
-        detail: "Acumulado del periodo",
-        icon: Icons.auto_graph_rounded,
+        value: "${snapshot.assignedActivities}",
+        label: "Actividades asignadas",
+        detail: "Total del tablero",
+        icon: Icons.assignment_outlined,
         tint: TutorPalette.primaryBlue,
       ),
       TutorMetricCard(
-        value: "${snapshot.grades.length}",
-        label: "Promedio por materia",
-        detail: "Materias visibles en el corte",
-        icon: Icons.menu_book_rounded,
-        tint: TutorPalette.success,
+        value: "${snapshot.pendingActivitiesCount}",
+        label: "Pendientes",
+        detail: "Por entregar o revisar",
+        icon: Icons.schedule_rounded,
+        tint: TutorPalette.warning,
       ),
       TutorMetricCard(
-        value: "3",
-        label: "Desglose por parcial",
-        detail: "Tres cortes por materia",
-        icon: Icons.filter_3_rounded,
-        tint: TutorPalette.warning,
+        value: "${snapshot.deliveredActivitiesCount}",
+        label: "Entregadas",
+        detail: "Registradas como completas",
+        icon: Icons.task_alt_rounded,
+        tint: TutorPalette.success,
       ),
     ];
 
@@ -252,14 +209,10 @@ class TutorGradesScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSubjectCards() {
+  Widget _buildActivitiesList() {
     return Column(
-      children: snapshot.grades.map((subject) {
-        final statusColor = subject.average >= 9
-            ? TutorPalette.success
-            : (subject.average >= 8
-                  ? TutorPalette.primaryBlue
-                  : TutorPalette.warning);
+      children: snapshot.activities.map((activity) {
+        final statusColor = tutorStatusColor(activity.status);
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -280,7 +233,7 @@ class TutorGradesScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Icon(
-                        Icons.book_rounded,
+                        Icons.assignment_turned_in_rounded,
                         color: statusColor,
                         size: 24,
                       ),
@@ -291,19 +244,19 @@ class TutorGradesScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            subject.subjectName,
+                            activity.title,
                             style: const TextStyle(
-                              fontSize: 16,
+                              fontSize: 15.5,
                               fontWeight: FontWeight.w900,
                               color: TutorPalette.textDark,
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 6),
                           Text(
-                            subject.teacherName,
+                            activity.subjectName,
                             style: const TextStyle(
                               fontSize: 12.8,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w700,
                               color: TutorPalette.textSoft,
                             ),
                           ),
@@ -311,102 +264,47 @@ class TutorGradesScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        TutorStatusBadge(
-                          text: "Promedio ${subject.average.toStringAsFixed(1)}",
-                          color: statusColor,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          subject.average >= 7 ? "Buen avance" : "Requiere apoyo",
-                          style: const TextStyle(
-                            color: TutorPalette.textSoft,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
+                    TutorStatusBadge(
+                      text: activity.status,
+                      color: statusColor,
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: List.generate(subject.partials.length, (index) {
-                    final partial = subject.partials[index];
-                    final partialColor = partial >= 9
-                        ? TutorPalette.success
-                        : (partial >= 8
-                              ? TutorPalette.primaryBlue
-                              : TutorPalette.warning);
-
-                    return Container(
-                      width: 140,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: partialColor.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: partialColor.withValues(alpha: 0.16),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Parcial ${index + 1}",
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: TutorPalette.textSoft,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            partial.toStringAsFixed(1),
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              color: partialColor,
-                              height: 1,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
+                const SizedBox(height: 14),
+                Text(
+                  activity.description,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: TutorPalette.textSoft,
+                    height: 1.45,
+                  ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: TutorPalette.border),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      const Text(
-                        "Comentario del maestro",
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
-                          color: TutorPalette.textSoft,
-                        ),
+                      const Icon(
+                        Icons.event_note_rounded,
+                        size: 18,
+                        color: TutorPalette.primaryBlue,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(width: 8),
                       Text(
-                        subject.teacherNote,
+                        "Fecha de entrega: ${activity.dueDateLabel}",
                         style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 12.8,
+                          fontWeight: FontWeight.w700,
                           color: TutorPalette.textDark,
-                          height: 1.5,
                         ),
                       ),
                     ],
@@ -418,10 +316,6 @@ class TutorGradesScreen extends StatelessWidget {
         );
       }).toList(),
     );
-  }
-
-  int _approvedCount() {
-    return snapshot.grades.where((subject) => subject.average >= 7).length;
   }
 
   Widget _heroPill({
