@@ -1,4 +1,4 @@
-import '../services/api_service.dart';
+import 'api_service.dart';
 
 enum EstadoAsistencia { presente, ausente, retardo }
 
@@ -45,10 +45,17 @@ class AsistenciaRegistro {
       detalles.where((e) => e.estado == EstadoAsistencia.retardo).length;
 }
 
-class AsistenciaService {
-  static final List<AsistenciaRegistro> _registros = [];
-  static int _nextId = 1;
+class AsistenciaAlumnoHistorialItem {
+  final AsistenciaRegistro registro;
+  final AsistenciaAlumno detalle;
 
+  const AsistenciaAlumnoHistorialItem({
+    required this.registro,
+    required this.detalle,
+  });
+}
+
+class AsistenciaService {
   static Future<void> guardarAsistencia({
     required Grupo grupo,
     required DateTime fecha,
@@ -56,53 +63,118 @@ class AsistenciaService {
     required Map<int, EstadoAsistencia> estados,
     required Map<int, String> notas,
   }) async {
-    final detalles = alumnos.map((a) {
-      return AsistenciaAlumno(
-        alumnoId: a.id,
-        nombreAlumno: a.nombre,
-        correoAlumno: a.correo,
-        estado: estados[a.id] ?? EstadoAsistencia.presente,
-        nota: notas[a.id] ?? '',
+    final detalles = alumnos.map((alumno) {
+      return AttendanceApiDetailDraft(
+        alumnoId: alumno.id,
+        estado: _estadoToApi(estados[alumno.id] ?? EstadoAsistencia.presente),
+        nota: notas[alumno.id] ?? '',
       );
     }).toList();
 
-    final existenteIndex = _registros.indexWhere(
-      (r) =>
-          r.grupoId == grupo.id &&
-          r.fecha.year == fecha.year &&
-          r.fecha.month == fecha.month &&
-          r.fecha.day == fecha.day,
-    );
-
-    final nuevoRegistro = AsistenciaRegistro(
-      id: existenteIndex >= 0 ? _registros[existenteIndex].id : _nextId++,
-      grupoId: grupo.id,
-      grupoNombre: grupo.nombre,
-      materia: grupo.materia,
+    await ApiService.guardarAsistenciaClase(
+      claseId: grupo.id,
       fecha: fecha,
       detalles: detalles,
     );
-
-    if (existenteIndex >= 0) {
-      _registros[existenteIndex] = nuevoRegistro;
-    } else {
-      _registros.insert(0, nuevoRegistro);
-    }
   }
 
   static Future<List<AsistenciaRegistro>> obtenerHistorialPorGrupo(
     int grupoId,
   ) async {
-    final lista = _registros.where((r) => r.grupoId == grupoId).toList();
-    lista.sort((a, b) => b.fecha.compareTo(a.fecha));
-    return lista;
+    final registros = await ApiService.getAsistenciasPorClase(grupoId);
+    return registros.map(_mapRecord).toList()
+      ..sort((a, b) => b.fecha.compareTo(a.fecha));
   }
 
   static Future<AsistenciaRegistro?> obtenerPorId(int id) async {
-    try {
-      return _registros.firstWhere((r) => r.id == id);
-    } catch (_) {
-      return null;
+    final record = await ApiService.getAsistenciaPorId(id);
+    return record == null ? null : _mapRecord(record);
+  }
+
+  static Future<List<AsistenciaAlumnoHistorialItem>> obtenerHistorialPorAlumno(
+    int alumnoId,
+  ) async {
+    final items = await ApiService.getAsistenciasPorAlumno(alumnoId);
+    final historial = items.map(_mapStudentItem).toList();
+    historial.sort((a, b) => b.registro.fecha.compareTo(a.registro.fecha));
+    return historial;
+  }
+
+  static AsistenciaRegistro _mapRecord(AttendanceApiRecord record) {
+    return AsistenciaRegistro(
+      id: record.id,
+      grupoId: record.grupoId,
+      grupoNombre: record.grupoNombre,
+      materia: record.materia,
+      fecha: _parseDate(record.fecha),
+      detalles: record.detalles.map(_mapDetail).toList(),
+    );
+  }
+
+  static AsistenciaAlumnoHistorialItem _mapStudentItem(
+    AttendanceApiStudentItem item,
+  ) {
+    final detalle = AsistenciaAlumno(
+      alumnoId: item.alumnoId,
+      nombreAlumno: item.alumnoNombre,
+      correoAlumno: item.alumnoCorreo,
+      estado: _estadoFromApi(item.estado),
+      nota: item.nota,
+    );
+
+    final registro = AsistenciaRegistro(
+      id: item.registroId,
+      grupoId: item.claseId,
+      grupoNombre: item.grupoNombre,
+      materia: item.materia,
+      fecha: _parseDate(item.fecha),
+      detalles: [detalle],
+    );
+
+    return AsistenciaAlumnoHistorialItem(
+      registro: registro,
+      detalle: detalle,
+    );
+  }
+
+  static AsistenciaAlumno _mapDetail(AttendanceApiDetail detail) {
+    return AsistenciaAlumno(
+      alumnoId: detail.alumnoId,
+      nombreAlumno: detail.nombre,
+      correoAlumno: detail.correo,
+      estado: _estadoFromApi(detail.estado),
+      nota: detail.nota,
+    );
+  }
+
+  static EstadoAsistencia _estadoFromApi(String value) {
+    switch (value.trim().toLowerCase()) {
+      case 'presente':
+        return EstadoAsistencia.presente;
+      case 'retardo':
+        return EstadoAsistencia.retardo;
+      default:
+        return EstadoAsistencia.ausente;
     }
+  }
+
+  static String _estadoToApi(EstadoAsistencia value) {
+    switch (value) {
+      case EstadoAsistencia.presente:
+        return 'presente';
+      case EstadoAsistencia.retardo:
+        return 'retardo';
+      case EstadoAsistencia.ausente:
+        return 'ausente';
+    }
+  }
+
+  static DateTime _parseDate(String raw) {
+    final parsed = DateTime.tryParse(raw);
+    if (parsed != null) {
+      return parsed;
+    }
+
+    return DateTime.fromMillisecondsSinceEpoch(0);
   }
 }

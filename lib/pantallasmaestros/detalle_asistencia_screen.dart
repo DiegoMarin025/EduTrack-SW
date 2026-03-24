@@ -54,6 +54,25 @@ class _DetalleAsistenciaScreenState extends State<DetalleAsistenciaScreen> {
     }
   }
 
+  Widget _buildStudentIdChip(int alumnoId) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFBFDBFE)),
+      ),
+      child: Text(
+        'ID: $alumnoId',
+        style: const TextStyle(
+          color: Color(0xFF1D4ED8),
+          fontWeight: FontWeight.w900,
+          fontSize: 12.2,
+        ),
+      ),
+    );
+  }
+
   Future<void> _exportar(AsistenciaExportFormat format) async {
     setState(() => _exportando = format);
 
@@ -204,6 +223,8 @@ class _DetalleAsistenciaScreenState extends State<DetalleAsistenciaScreen> {
                         ),
                       ),
                       const SizedBox(height: 4),
+                      _buildStudentIdChip(item.alumnoId),
+                      const SizedBox(height: 8),
                       Text(
                         item.correoAlumno,
                         style: const TextStyle(

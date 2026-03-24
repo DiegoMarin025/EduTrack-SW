@@ -1,108 +1,759 @@
 import 'package:flutter/material.dart';
 
+import 'tutor_absence_justification_screen.dart';
+import 'tutor_activities_screen.dart';
+import 'tutor_attendance_screen.dart';
+import 'tutor_communication_screen.dart';
+import 'tutor_demo_data.dart';
+import 'tutor_grades_screen.dart';
+import 'tutor_live_data_service.dart';
+import 'tutor_teacher_report_screen.dart';
+import 'tutor_ui.dart';
+
 class TutorDashboard extends StatefulWidget {
   final int userId;
-  const TutorDashboard({super.key, required this.userId});
+  final String username;
+
+  const TutorDashboard({
+    super.key,
+    required this.userId,
+    required this.username,
+  });
+
   @override
-  _TutorDashboardState createState() => _TutorDashboardState();
+  State<TutorDashboard> createState() => _TutorDashboardState();
 }
 
 class _TutorDashboardState extends State<TutorDashboard> {
-  // Datos temporales (Placeholders) mientras tu compañero termina la DB
-  final String nombreHijo = "Diego Alejandro Marín"; 
-  final double promedioGeneral = 9.2;
-  final int totalAsistencias = 45;
-  final int totalFaltas = 3;
-  final int actividadesPendientes = 5;
+  late TutorStudentSnapshot _snapshot;
+  bool _syncing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Fallback inicial: evita una pantalla vacia mientras cargan datos reales.
+    _snapshot = buildTutorDemoData(tutorName: widget.username);
+    _loadSnapshot();
+  }
+
+  Future<void> _loadSnapshot() async {
+    setState(() => _syncing = true);
+
+    // Punto principal de integracion para la vista tutor/alumno.
+    // Si despues se migra todo a Firebase, esta llamada puede seguir existiendo
+    // como fachada y cambiarse solo la implementacion interna del servicio.
+    final loaded = await TutorLiveDataService.loadSnapshot(
+      sessionUserId: widget.userId,
+      tutorName: widget.username,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _snapshot = loaded;
+      _syncing = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        title: Text('Panel del Tutor', style: TextStyle(color: Colors.white)),
-        backgroundColor: Colors.blue[900],
-        actions: [
-          IconButton(
-            icon: Icon(Icons.notifications_none, color: Colors.white),
-            onPressed: () {},
+    final width = MediaQuery.of(context).size.width;
+    final isWebWide = width >= 960;
+    final isTablet = width >= 640;
+
+    return Container(
+      color: TutorPalette.bgLight,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: isWebWide ? 1120 : double.infinity,
           ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Sección: Información del Hijo
-            _buildChildInfoCard(),
-            SizedBox(height: 20),
-
-            // Sección: Resumen Académico (Promedio y Asistencia)
-            Text(
-              "Resumen Académico",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue[900]),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+              horizontal: isWebWide ? 28 : 20,
+              vertical: 18,
             ),
-            SizedBox(height: 10),
-            Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(child: _buildStatCard("Promedio", promedioGeneral.toString(), Icons.star, Colors.orange)),
-                SizedBox(width: 10),
-                Expanded(child: _buildStatCard("Asistencias", "$totalAsistencias", Icons.check_circle, Colors.green)),
+                _buildTopHeader(isTablet),
+                const SizedBox(height: 16),
+                _buildHeroCard(isTablet),
+                const SizedBox(height: 16),
+                _buildSummaryGrid(isWebWide, isTablet),
+                const SizedBox(height: 18),
+                tutorSectionTitle("Acciones rapidas"),
+                const SizedBox(height: 12),
+                _buildQuickActionsGrid(isWebWide, isTablet),
+                const SizedBox(height: 18),
+                tutorSectionTitle("Comentarios del maestro"),
+                const SizedBox(height: 12),
+                _buildCommentsList(),
+                const SizedBox(height: 18),
+                tutorSectionTitle("Reportes registrados"),
+                const SizedBox(height: 12),
+                _buildReportsList(),
               ],
             ),
-            SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(child: _buildStatCard("Faltas", "$totalFaltas", Icons.cancel, Colors.red)),
-                SizedBox(width: 10),
-                Expanded(child: _buildStatCard("Actividades", "$actividadesPendientes", Icons.assignment, Colors.blue)),
-              ],
-            ),
-            SizedBox(height: 25),
-
-            // Sección: Acciones Rápidas
-            Text(
-              "Detalles y Seguimiento",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue[900]),
-            ),
-            SizedBox(height: 15),
-            _buildMenuOption("Ver Calificaciones Detalladas", Icons.list_alt, Colors.blue[800]!),
-            _buildMenuOption("Historial de Asistencias", Icons.calendar_today, Colors.blue[700]!),
-            _buildMenuOption("Justificar Faltas", Icons.upload_file, Colors.blue[600]!),
-            _buildMenuOption("Información del Maestro", Icons.person_search, Colors.blue[500]!),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  // Widget para la tarjeta principal del alumno
-  Widget _buildChildInfoCard() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: Padding(
-        padding: EdgeInsets.all(20),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 35,
-              backgroundColor: Colors.blue[900],
-              child: Icon(Icons.person, size: 40, color: Colors.white),
+  Widget _buildTopHeader(bool isTablet) {
+    final now = DateTime.now();
+    final dateText =
+        "${tutorWeekdayEs(now.weekday)} ${now.day} ${tutorMonthEs(now.month)}";
+
+    final leadingBlock = Expanded(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: TutorPalette.primaryBlue.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(16),
             ),
-            SizedBox(width: 20),
+            child: const Icon(
+              Icons.family_restroom_rounded,
+              color: TutorPalette.primaryBlue,
+              size: 26,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Hola, ${_firstName(widget.username)}!",
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: TutorPalette.darkBlue,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  "Aqui tienes el panorama academico de ${_snapshot.studentName}.",
+                  style: const TextStyle(
+                    color: TutorPalette.textSoft,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final trailing = Column(
+      crossAxisAlignment: isTablet
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: TutorPalette.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.calendar_month_rounded,
+                size: 18,
+                color: TutorPalette.primaryBlue,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                dateText,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF334155),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        IconButton(
+          tooltip: "Actualizar",
+          onPressed: _syncing ? null : _loadSnapshot,
+          icon: _syncing
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: TutorPalette.primaryBlue,
+                  ),
+                )
+              : const Icon(
+                  Icons.refresh_rounded,
+                  color: TutorPalette.primaryBlue,
+                ),
+        ),
+      ],
+    );
+
+    if (isTablet) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [leadingBlock, const SizedBox(width: 12), trailing],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [leadingBlock]),
+        const SizedBox(height: 14),
+        trailing,
+      ],
+    );
+  }
+
+  Widget _buildHeroCard(bool isTablet) {
+    final assignedTeacher = _buildAssignedTeacherLabel();
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: const Text(
+            "VISTA DEL TUTOR",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.6,
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Icon(
+                Icons.school_rounded,
+                color: Colors.white,
+                size: 30,
+              ),
+            ),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Tutor de:", style: TextStyle(color: Colors.grey[600], fontSize: 14)),
                   Text(
-                    nombreHijo,
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    _snapshot.studentName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      height: 1.1,
+                    ),
                   ),
-                  Text("Grupo: TI-51", style: TextStyle(color: Colors.blue[900])),
+                  const SizedBox(height: 6),
+                  Text(
+                    _buildStudentMetaLine(),
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (assignedTeacher != null) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.person_rounded,
+                          size: 16,
+                          color: Colors.white70,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            "Maestro asignado: $assignedTeacher",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  const Text(
+                    "Consulta calificaciones, asistencia, actividades y seguimiento del maestro desde un mismo tablero.",
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      height: 1.4,
+                    ),
+                  ),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final pills = Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      alignment: WrapAlignment.end,
+      children: [
+        _heroPill(
+          icon: Icons.star_rounded,
+          title: _snapshot.generalAverage.toStringAsFixed(1),
+          subtitle: "Promedio",
+        ),
+        _heroPill(
+          icon: Icons.how_to_reg_rounded,
+          title: "${_snapshot.attendancePercentage.toStringAsFixed(0)}%",
+          subtitle: "Asistencia",
+        ),
+        _heroPill(
+          icon: Icons.assignment_rounded,
+          title: "${_snapshot.reportsCount}",
+          subtitle: "Reportes",
+        ),
+        _heroButton(),
+      ],
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [TutorPalette.primaryBlue, TutorPalette.darkBlue],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: TutorPalette.primaryBlue.withValues(alpha: 0.18),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: isTablet
+            ? Row(
+                children: [
+                  Expanded(child: details),
+                  const SizedBox(width: 14),
+                  pills,
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [details, const SizedBox(height: 16), pills],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryGrid(bool isWebWide, bool isTablet) {
+    // Estas tarjetas ya leen del snapshot final. Si aparecen nuevos campos reales
+    // de tutor (por ejemplo faltas justificadas, tutor titular, etc.), agregarlos aqui.
+    final items = [
+      _DashboardMetric(
+        value: _snapshot.generalAverage.toStringAsFixed(1),
+        label: "Promedio general",
+        detail: "Promedio acumulado actual",
+        icon: Icons.auto_graph_rounded,
+        tint: TutorPalette.primaryBlue,
+      ),
+      _DashboardMetric(
+        value: "${_snapshot.totalAssistances}",
+        label: "Total de asistencias",
+        detail: "Registros confirmados",
+        icon: Icons.fact_check_rounded,
+        tint: TutorPalette.success,
+      ),
+      _DashboardMetric(
+        value: "${_snapshot.totalAbsences}",
+        label: "Total de faltas",
+        detail: "Seguimiento puntual",
+        icon: Icons.event_busy_rounded,
+        tint: TutorPalette.danger,
+      ),
+      _DashboardMetric(
+        value: "${_snapshot.assignedActivities}",
+        label: "Actividades asignadas",
+        detail: "${_snapshot.pendingActivitiesCount} pendientes",
+        icon: Icons.assignment_outlined,
+        tint: TutorPalette.warning,
+      ),
+      _DashboardMetric(
+        value: "${_snapshot.teacherCommentsCount}",
+        label: "Comentarios del maestro",
+        detail: "Mensajes recientes",
+        icon: Icons.chat_bubble_outline_rounded,
+        tint: TutorPalette.info,
+      ),
+      _DashboardMetric(
+        value: "${_snapshot.reportsCount}",
+        label: "Reportes registrados",
+        detail: "Academicos y de seguimiento",
+        icon: Icons.description_outlined,
+        tint: TutorPalette.violet,
+      ),
+    ];
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: items.length,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: isWebWide ? 3 : (isTablet ? 2 : 1),
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: isWebWide ? 2.2 : (isTablet ? 2.2 : 2.8),
+      ),
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return TutorMetricCard(
+          value: item.value,
+          label: item.label,
+          detail: item.detail,
+          icon: item.icon,
+          tint: item.tint,
+        );
+      },
+    );
+  }
+
+  Widget _buildQuickActionsGrid(bool isWebWide, bool isTablet) {
+    final actions = [
+      TutorActionCard(
+        title: "Calificaciones",
+        subtitle: "Promedio y evaluaciones",
+        icon: Icons.grade_rounded,
+        tint: TutorPalette.primaryBlue,
+        onTap: () => _openScreen(
+          TutorGradesScreen(
+            snapshot: _snapshot,
+            userId: widget.userId,
+            tutorName: widget.username,
+          ),
+        ),
+      ),
+      TutorActionCard(
+        title: "Asistencia",
+        subtitle: "Historial y porcentaje",
+        icon: Icons.calendar_month_rounded,
+        tint: TutorPalette.success,
+        onTap: () => _openScreen(
+          TutorAttendanceScreen(
+            snapshot: _snapshot,
+            userId: widget.userId,
+            tutorName: widget.username,
+          ),
+        ),
+      ),
+      TutorActionCard(
+        title: "Actividades",
+        subtitle: "Pendientes y entregas",
+        icon: Icons.assignment_rounded,
+        tint: TutorPalette.warning,
+        onTap: () => _openScreen(TutorActivitiesScreen(snapshot: _snapshot)),
+      ),
+      TutorActionCard(
+        title: "Seguimiento",
+        subtitle: "Comentarios y envios",
+        icon: Icons.forum_rounded,
+        tint: TutorPalette.info,
+        onTap: () => _openScreen(
+          TutorCommunicationScreen(
+            initialSnapshot: _snapshot,
+            userId: widget.userId,
+            tutorName: widget.username,
+          ),
+        ),
+      ),
+      TutorActionCard(
+        title: "Justificar faltas",
+        subtitle: "Enviar aclaraciones",
+        icon: Icons.approval_rounded,
+        tint: TutorPalette.violet,
+        onTap: () => _openScreen(
+          TutorAbsenceJustificationScreen(
+            snapshot: _snapshot,
+            userId: widget.userId,
+            tutorName: widget.username,
+          ),
+        ),
+      ),
+      TutorActionCard(
+        title: "Reportar al maestro",
+        subtitle: "Enviar seguimiento",
+        icon: Icons.campaign_rounded,
+        tint: TutorPalette.info,
+        onTap: () => _openScreen(
+          TutorTeacherReportScreen(snapshot: _snapshot, userId: widget.userId),
+        ),
+      ),
+    ];
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: actions.length,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: isWebWide ? 4 : (isTablet ? 2 : 1),
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: isWebWide ? 1.35 : (isTablet ? 1.35 : 2.4),
+      ),
+      itemBuilder: (context, index) => actions[index],
+    );
+  }
+
+  Widget _buildCommentsList() {
+    // Comentarios del maestro: hoy salen del historial/fallback.
+    // Cuando exista una coleccion real de mensajes docente->tutor, reemplazar
+    // _snapshot.comments sin tocar este render.
+    if (_snapshot.comments.isEmpty) {
+      return tutorEmptyStateCard(
+        icon: Icons.chat_bubble_outline_rounded,
+        title: "Aqui apareceran los comentarios del maestro",
+        message:
+            "Cuando se vincule al alumno y existan mensajes docentes, se mostraran en esta seccion.",
+      );
+    }
+
+    return Column(
+      children: _snapshot.comments.map((comment) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _detailCard(
+            icon: Icons.chat_bubble_outline_rounded,
+            tint: TutorPalette.info,
+            title: comment.subjectName,
+            subtitle: comment.message,
+            trailingTop: TutorStatusBadge(
+              text: comment.dateLabel,
+              color: TutorPalette.info,
+            ),
+            trailingBottom: Text(
+              comment.author,
+              style: const TextStyle(
+                color: TutorPalette.textSoft,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildReportsList() {
+    // Reportes registrados: hoy se alimentan de notificaciones o demo.
+    // Si mas adelante hay una coleccion "reportes" en Firebase, mapearla al snapshot.
+    if (_snapshot.reports.isEmpty) {
+      return tutorEmptyStateCard(
+        icon: Icons.description_outlined,
+        title: "Aqui apareceran los reportes registrados",
+        message:
+            "Esta seccion mostrara reportes academicos y de seguimiento cuando haya informacion disponible.",
+      );
+    }
+
+    return Column(
+      children: _snapshot.reports.map((report) {
+        final statusColor = tutorStatusColor(report.status);
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _detailCard(
+            icon: Icons.description_outlined,
+            tint: TutorPalette.violet,
+            title: report.title,
+            subtitle: report.summary,
+            trailingTop: TutorStatusBadge(
+              text: report.status,
+              color: statusColor,
+            ),
+            trailingBottom: Text(
+              report.dateLabel,
+              style: const TextStyle(
+                color: TutorPalette.textSoft,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _detailCard({
+    required IconData icon,
+    required Color tint,
+    required String title,
+    required String subtitle,
+    required Widget trailingTop,
+    required Widget trailingBottom,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: tutorSurfaceDecoration(),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: tint.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(icon, color: tint, size: 24),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w900,
+                    color: TutorPalette.textDark,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: TutorPalette.textSoft,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [trailingTop, const SizedBox(height: 8), trailingBottom],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _heroPill({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 18),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _heroButton() {
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: () => _openScreen(
+        TutorGradesScreen(
+          snapshot: _snapshot,
+          userId: widget.userId,
+          tutorName: widget.username,
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
+            SizedBox(width: 6),
+            Text(
+              "Ver calificaciones",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
               ),
             ),
           ],
@@ -111,43 +762,96 @@ class _TutorDashboardState extends State<TutorDashboard> {
     );
   }
 
-  // Widget para las tarjetas de estadísticas (Promedio, Asistencias, etc)
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 30),
-            SizedBox(height: 8),
-            Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            Text(title, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-          ],
-        ),
-      ),
+  Future<void> _openScreen(Widget screen) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => screen),
     );
+
+    if (result == true && mounted) {
+      _loadSnapshot();
+    }
   }
 
-  // Widget para los botones de menú
-  Widget _buildMenuOption(String title, IconData icon, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        leading: Container(
-          padding: EdgeInsets.all(8),
-          decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-          child: Icon(icon, color: color),
-        ),
-        title: Text(title, style: TextStyle(fontWeight: FontWeight.w600)),
-        trailing: Icon(Icons.arrow_forward_ios, size: 16),
-        onTap: () {
-          // Aquí navegaremos a las sub-vistas en los siguientes pasos
-        },
-        tileColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+  String _firstName(String value) {
+    final clean = value.trim();
+    if (clean.isEmpty) {
+      return "Tutor";
+    }
+
+    final first = clean.split(RegExp(r"\s+")).first;
+    return first.isEmpty
+        ? "Tutor"
+        : "${first[0].toUpperCase()}${first.substring(1).toLowerCase()}";
   }
+
+  String _buildStudentMetaLine() {
+    final parts = <String>[];
+    final groupName = _snapshot.groupName.trim();
+    final identity = _snapshot.schoolPeriod.trim();
+
+    if (groupName.isNotEmpty && groupName.toLowerCase() != "pendiente") {
+      parts.add("Grupo $groupName");
+    }
+    if (identity.isNotEmpty &&
+        identity.toLowerCase() != "sin informacion academica") {
+      parts.add(identity);
+    }
+
+    return parts.isNotEmpty ? parts.join("  |  ") : "Alumno vinculado";
+  }
+
+  String? _buildAssignedTeacherLabel() {
+    final counts = <String, int>{};
+
+    void registerName(String rawValue) {
+      final clean = rawValue.trim();
+      final normalized = clean.toLowerCase();
+      if (clean.isEmpty ||
+          normalized == 'docente asignado' ||
+          normalized == 'sin docente asignado') {
+        return;
+      }
+      counts.update(clean, (value) => value + 1, ifAbsent: () => 1);
+    }
+
+    for (final grade in _snapshot.grades) {
+      registerName(grade.teacherName);
+    }
+
+    for (final comment in _snapshot.comments) {
+      registerName(comment.author);
+    }
+
+    if (counts.isEmpty) {
+      return null;
+    }
+
+    final ranked = counts.entries.toList()
+      ..sort((a, b) {
+        final byCount = b.value.compareTo(a.value);
+        if (byCount != 0) {
+          return byCount;
+        }
+        return a.key.toLowerCase().compareTo(b.key.toLowerCase());
+      });
+
+    return ranked.first.key;
+  }
+}
+
+class _DashboardMetric {
+  final String value;
+  final String label;
+  final String detail;
+  final IconData icon;
+  final Color tint;
+
+  const _DashboardMetric({
+    required this.value,
+    required this.label,
+    required this.detail,
+    required this.icon,
+    required this.tint,
+  });
 }

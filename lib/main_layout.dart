@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'pantallas/historial_academico_screen.dart';
-import 'pantallas/calendario_screen.dart';
-import 'pantallas/ayuda_screen.dart';
-import 'pantallas/notificaciones.dart';
+
 import 'login_page.dart';
+import 'pantallas/ayuda_screen.dart';
+import 'pantallas/historial_academico_screen.dart';
+import 'pantallas/notificaciones.dart';
+import 'pantallas/tutor/tutor_communication_screen.dart';
 import 'pantallas/tutor/tutor_dashboard.dart';
+import 'pantallas/tutor/tutor_demo_data.dart';
 
 class MainLayout extends StatefulWidget {
   final String username;
@@ -23,6 +25,7 @@ class MainLayout extends StatefulWidget {
 
 class _MainLayoutState extends State<MainLayout> {
   int _selectedIndex = 0;
+  int _linkedStudentId = 0;
   String _nombreDisplay = '';
   String _correoDisplay = '';
   String _rolDisplay = '';
@@ -32,7 +35,7 @@ class _MainLayoutState extends State<MainLayout> {
     super.initState();
     _nombreDisplay = widget.username;
     _cargarDatosUsuario();
-    _cargarIndiceGuardado(); // <- carga el índice guardado
+    _cargarIndiceGuardado();
   }
 
   Future<void> _cargarDatosUsuario() async {
@@ -41,6 +44,7 @@ class _MainLayoutState extends State<MainLayout> {
       _correoDisplay =
           prefs.getString('saved_username') ?? 'correo@ejemplo.com';
       _rolDisplay = prefs.getString('saved_userType') ?? 'Alumno';
+      _linkedStudentId = prefs.getInt('saved_linked_student_id') ?? 0;
       if (_nombreDisplay == 'Alumno' || _nombreDisplay.isEmpty) {
         _nombreDisplay = _correoDisplay.split('@')[0];
       }
@@ -51,35 +55,50 @@ class _MainLayoutState extends State<MainLayout> {
     final prefs = await SharedPreferences.getInstance();
     final savedIndex = prefs.getInt('selectedIndex') ?? 0;
     setState(() {
-      _selectedIndex = savedIndex;
+      _selectedIndex = savedIndex.clamp(0, 3);
     });
   }
 
   List<Widget> get _widgetOptions => <Widget>[
-    TutorDashboard(userId: widget.usuarioId),
+    TutorDashboard(
+      userId: widget.usuarioId,
+      username: _displayName,
+    ),
     HistorialAcademicoScreen(
-      alumnoId: widget.usuarioId,
+      alumnoId: _linkedStudentId > 0 ? _linkedStudentId : widget.usuarioId,
       onNavigate: _onSelectItem,
     ),
-    CalendarioScreen(onNavigate: _onSelectItem),
-    AyudaScreen(),
+    TutorCommunicationScreen(
+      initialSnapshot: buildTutorDemoData(tutorName: _displayName),
+      userId: widget.usuarioId,
+      tutorName: _displayName,
+    ),
+    const AyudaScreen(),
   ];
 
-  static const List<String> _titles = [
-    'Mi Desempeño',
-    'Historial Académico',
-    'Calendario Escolar',
+  List<String> get _screenTitles => [
+    _isTutor ? 'Panel del Tutor' : 'Mi Desempeno',
+    'Historial Academico',
+    'Seguimiento al maestro',
     'Ayuda y Soporte',
   ];
 
-  void _onSelectItem(int index) async {
-    // Guardar el índice seleccionado
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('selectedIndex', index);
+  String get _displayName =>
+      _nombreDisplay.isNotEmpty ? _nombreDisplay : widget.username;
 
-    // Cambiar pantalla
+  bool get _isTutor => _rolDisplay.trim().toLowerCase() == 'tutor';
+
+  Future<void> _onSelectItem(int index) async {
+    final safeIndex = index.clamp(0, _widgetOptions.length - 1);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('selectedIndex', safeIndex);
+
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
-      _selectedIndex = index;
+      _selectedIndex = safeIndex;
     });
   }
 
@@ -87,8 +106,8 @@ class _MainLayoutState extends State<MainLayout> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_titles[_selectedIndex]),
-        backgroundColor: Color(0xFF1E3A8A),
+        title: Text(_screenTitles[_selectedIndex]),
+        backgroundColor: const Color(0xFF1E3A8A),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -111,24 +130,24 @@ class _MainLayoutState extends State<MainLayout> {
           color: Colors.white,
           child: Column(
             children: [
-              _buildDrawerHeader(), // <--- Encabezado personalizado
+              _buildDrawerHeader(),
               Expanded(
                 child: ListView(
                   padding: EdgeInsets.zero,
                   children: [
                     _buildDrawerItem(
                       icon: Icons.dashboard_rounded,
-                      text: 'Mi Desempeño',
+                      text: _isTutor ? 'Panel del Tutor' : 'Mi Desempeno',
                       index: 0,
                     ),
                     _buildDrawerItem(
                       icon: Icons.school_rounded,
-                      text: 'Historial Académico',
+                      text: 'Historial Academico',
                       index: 1,
                     ),
                     _buildDrawerItem(
-                      icon: Icons.calendar_today_rounded,
-                      text: 'Calendario',
+                      icon: Icons.forum_outlined,
+                      text: 'Seguimiento al maestro',
                       index: 2,
                     ),
                     const Divider(
@@ -138,7 +157,7 @@ class _MainLayoutState extends State<MainLayout> {
                     ),
                     _buildDrawerItem(
                       icon: Icons.help_outline_rounded,
-                      text: '¿Necesitas ayuda?',
+                      text: 'Necesitas ayuda?',
                       index: 3,
                     ),
                   ],
@@ -152,7 +171,7 @@ class _MainLayoutState extends State<MainLayout> {
                     color: Colors.redAccent,
                   ),
                   title: const Text(
-                    'Cerrar Sesión',
+                    'Cerrar sesion',
                     style: TextStyle(
                       color: Colors.redAccent,
                       fontWeight: FontWeight.bold,
@@ -179,14 +198,10 @@ class _MainLayoutState extends State<MainLayout> {
           ),
         ),
       ),
-
       body: _widgetOptions.elementAt(_selectedIndex),
     );
   }
 
-  // ------------------------------------------------------------------
-  // ENCABEZADO PERSONALIZADO
-  // ------------------------------------------------------------------
   Widget _buildDrawerHeader() {
     return Container(
       width: double.infinity,
@@ -201,12 +216,11 @@ class _MainLayoutState extends State<MainLayout> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. EL ICONO / AVATAR
           CircleAvatar(
             radius: 35,
             backgroundColor: Colors.white,
             child: Text(
-              _nombreDisplay.isNotEmpty ? _nombreDisplay[0].toUpperCase() : 'A',
+              _displayName.isNotEmpty ? _displayName[0].toUpperCase() : 'A',
               style: const TextStyle(
                 fontSize: 30,
                 color: Color(0xFF1E3A8A),
@@ -214,13 +228,9 @@ class _MainLayoutState extends State<MainLayout> {
               ),
             ),
           ),
-
-          // 2. ESPACIO EXTRA
           const SizedBox(height: 25),
-
-          // 3. EL USUARIO Y TEXTO
           Text(
-            _nombreDisplay,
+            _displayName,
             style: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 20,
@@ -236,7 +246,7 @@ class _MainLayoutState extends State<MainLayout> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
@@ -258,7 +268,7 @@ class _MainLayoutState extends State<MainLayout> {
     required String text,
     required int index,
   }) {
-    final bool isSelected = _selectedIndex == index;
+    final isSelected = _selectedIndex == index;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -266,8 +276,8 @@ class _MainLayoutState extends State<MainLayout> {
         gradient: isSelected
             ? LinearGradient(
                 colors: [
-                  Color(0xFF1E3A8A).withOpacity(0.2),
-                  Color(0xFF1E3A8A).withOpacity(0.05),
+                  const Color(0xFF1E3A8A).withValues(alpha: 0.2),
+                  const Color(0xFF1E3A8A).withValues(alpha: 0.05),
                 ],
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
@@ -278,19 +288,18 @@ class _MainLayoutState extends State<MainLayout> {
       child: ListTile(
         leading: Icon(
           icon,
-          color: isSelected ? Color(0xFF1E3A8A) : Colors.grey.shade700,
+          color: isSelected ? const Color(0xFF1E3A8A) : Colors.grey.shade700,
         ),
         title: Text(
           text,
           style: TextStyle(
-            color: isSelected ? Color(0xFF1E3A8A) : Colors.black87,
+            color: isSelected ? const Color(0xFF1E3A8A) : Colors.black87,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
-        // CORRECCIÓN AQUÍ: Cierra el Drawer antes de cambiar de pantalla
         onTap: () {
-          Navigator.of(context).pop(); // Cierra el menú lateral
-          _onSelectItem(index); // Cambia la pantalla
+          Navigator.of(context).pop();
+          _onSelectItem(index);
         },
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),

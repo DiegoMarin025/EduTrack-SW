@@ -176,6 +176,7 @@ class AsistenciaExportService {
           final nota = detalle.nota.trim().isEmpty ? 'Sin nota' : detalle.nota;
           return '''
             <tr>
+              <td>${detalle.alumnoId}</td>
               <td>${_html(detalle.nombreAlumno)}</td>
               <td>${_html(detalle.correoAlumno)}</td>
               <td>${_html(_estadoTexto(detalle.estado))}</td>
@@ -228,6 +229,7 @@ class AsistenciaExportService {
           <table>
             <thead>
               <tr>
+                <th>ID alumno</th>
                 <th>Alumno</th>
                 <th>Correo</th>
                 <th>Estado</th>
@@ -251,14 +253,14 @@ class AsistenciaExportService {
       'Fecha: ${_displayDateFormat.format(registro.fecha)}',
       'Presentes: ${registro.presentes} | Ausentes: ${registro.ausentes} | Retardos: ${registro.retardos}',
       '',
-      'Alumno | Correo | Estado | Nota',
+      'ID | Alumno | Correo | Estado | Nota',
       '',
     ];
 
     for (final detalle in registro.detalles) {
       final nota = detalle.nota.trim().isEmpty ? 'Sin nota' : detalle.nota;
       lines.add(
-        '${detalle.nombreAlumno} | ${detalle.correoAlumno} | ${_estadoTexto(detalle.estado)} | ${nota.replaceAll('\n', ' ')}',
+        '${detalle.alumnoId} | ${detalle.nombreAlumno} | ${detalle.correoAlumno} | ${_estadoTexto(detalle.estado)} | ${nota.replaceAll('\n', ' ')}',
       );
     }
 

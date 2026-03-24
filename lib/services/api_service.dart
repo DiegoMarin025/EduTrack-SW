@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:io' show Platform; // Android/iOS
 import 'package:flutter/foundation.dart' show kIsWeb; // Web
 import '/pantallas/materia_models.dart';
+import 'report_attachment_picker.dart';
 
 // SERVICIO API
 class ApiService {
@@ -229,6 +230,122 @@ class ApiService {
     }
   }
 
+  static Future<List<ActividadClaseResumen>> getActividadesClase(
+    int claseId,
+  ) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/clases/$claseId/actividades'),
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body);
+      return data
+          .map(
+            (item) =>
+                ActividadClaseResumen.fromJson(item as Map<String, dynamic>),
+          )
+          .toList();
+    } else {
+      throw Exception('Error al cargar actividades de la clase');
+    }
+  }
+
+  static Future<int> crearActividadClase({
+    required int claseId,
+    required String titulo,
+    required String descripcion,
+    required double valor,
+    String? fechaEntrega,
+    bool cuentaParaFinal = true,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/clases/$claseId/actividades'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'titulo': titulo,
+        'descripcion': descripcion,
+        'valor': valor,
+        'fecha_entrega': fechaEntrega,
+        'cuenta_para_final': cuentaParaFinal,
+      }),
+    );
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final body = json.decode(response.body);
+      return _asInt(body['id']);
+    } else {
+      final body = json.decode(response.body);
+      throw Exception(body['error'] ?? 'Error al crear actividad');
+    }
+  }
+
+  static Future<ActividadClaseDetalle> getActividadClaseDetalle(
+    int actividadId,
+  ) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/actividades/$actividadId/detalle'),
+    );
+
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body) as Map<String, dynamic>;
+      return ActividadClaseDetalle.fromJson(body);
+    } else {
+      final body = json.decode(response.body);
+      throw Exception(body['error'] ?? 'Error al cargar detalle de actividad');
+    }
+  }
+
+  static Future<void> guardarCapturasActividad({
+    required int actividadId,
+    required List<ActividadAlumnoCaptura> capturas,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/actividades/$actividadId/capturas'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'capturas': capturas.map((captura) => captura.toPayload()).toList(),
+      }),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final body = json.decode(response.body);
+      throw Exception(body['error'] ?? 'Error al guardar capturas');
+    }
+  }
+
+  static Future<ResumenFinalClase> getResumenFinalClase(int claseId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/clases/$claseId/finales_resumen'),
+    );
+
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body) as Map<String, dynamic>;
+      return ResumenFinalClase.fromJson(body);
+    } else {
+      final body = json.decode(response.body);
+      throw Exception(body['error'] ?? 'Error al cargar resumen final');
+    }
+  }
+
+  static Future<ResumenFinalAlumno> getResumenFinalAlumno({
+    required int claseId,
+    required int alumnoId,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/clases/$claseId/alumnos/$alumnoId/final_resumen'),
+    );
+
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body) as Map<String, dynamic>;
+      return ResumenFinalAlumno.fromJson(
+        body['alumno'] as Map<String, dynamic>,
+      );
+    } else {
+      final body = json.decode(response.body);
+      throw Exception(body['error'] ?? 'Error al cargar resumen del alumno');
+    }
+  }
+
   static Future<List<Notificacion>> getNotificaciones(int usuarioId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/notificaciones/$usuarioId'),
@@ -249,10 +366,15 @@ class ApiService {
     String nombre,
     String correo,
     String contrasena,
-    String tipoUsuario,
-  ) async {
+    String tipoUsuario, {
+    String? matriculaHijo,
+  }) async {
+    final rolNormalizado = tipoUsuario.trim().toLowerCase();
+    final rol = rolNormalizado == 'maestro' ? 'profesor' : rolNormalizado;
+    final endpoint = rol == 'tutor' ? '/register_tutor' : '/register';
+
     final response = await http.post(
-      Uri.parse('$baseUrl/register'),
+      Uri.parse('$baseUrl$endpoint'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
         'nombre': nombre,
@@ -260,9 +382,17 @@ class ApiService {
         'email': correo,
         'password': contrasena,
         'contrasena': contrasena,
-        'rol': tipoUsuario,
-        'tipo_usuario': tipoUsuario,
-        'tipoUsuario': tipoUsuario,
+        'rol': rol,
+        'tipo_usuario': rol,
+        'tipoUsuario': rol,
+        'matricula_hijo':
+            matriculaHijo != null && matriculaHijo.trim().isNotEmpty
+            ? int.tryParse(matriculaHijo.trim()) ?? matriculaHijo.trim()
+            : null,
+        'alumno_id_vinculado':
+            matriculaHijo != null && matriculaHijo.trim().isNotEmpty
+            ? int.tryParse(matriculaHijo.trim()) ?? matriculaHijo.trim()
+            : null,
       }),
     );
 
@@ -383,24 +513,51 @@ class ApiService {
     }
   }
 
+  static Future<GrupoFisico> crearGrupoFisico(String nombreGrupo) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/grupos/crear'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'nombre_grupo': nombreGrupo.trim()}),
+    );
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final body = json.decode(response.body) as Map<String, dynamic>;
+      return GrupoFisico.fromJson(body);
+    }
+
+    throw Exception(_extractApiError(response, 'Error creando grupo'));
+  }
+
   // 11. CREAR CLASE (MATERIA) - VINCULA AL PROFESOR
-  static Future<void> crearClase(
-    int grupoId,
-    String nombreMateria, {
+  static Future<void> crearClase({
+    int? grupoId,
+    String? nombreGrupo,
+    required String nombreMateria,
     int? profesorId,
   }) async {
+    final nombreMateriaClean = nombreMateria.trim();
+    final nombreGrupoClean = nombreGrupo?.trim() ?? '';
+
+    if (nombreMateriaClean.isEmpty) {
+      throw Exception('El nombre de la materia es obligatorio');
+    }
+    if (grupoId == null && nombreGrupoClean.isEmpty) {
+      throw Exception('Selecciona un grupo o escribe el nombre de uno nuevo');
+    }
+
     final response = await http.post(
       Uri.parse('$baseUrl/clases/crear'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
-        'grupo_id': grupoId,
-        'nombre_materia': nombreMateria,
+        if (grupoId != null) 'grupo_id': grupoId,
+        if (nombreGrupoClean.isNotEmpty) 'nombre_grupo': nombreGrupoClean,
+        'nombre_materia': nombreMateriaClean,
         'profesor_id': profesorId,
       }),
     );
 
-    if (response.statusCode != 200) {
-      throw Exception('Error creando la clase');
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_extractApiError(response, 'Error creando la clase'));
     }
   }
 
@@ -480,6 +637,186 @@ class ApiService {
     }
   }
 
+  static Future<TutorAlumnoVinculado?> getTutorAlumnoVinculado(
+    int tutorId,
+  ) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/tutores/$tutorId/alumno'),
+    );
+
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body) as Map<String, dynamic>;
+      return TutorAlumnoVinculado.fromJson(body);
+    }
+
+    if (response.statusCode == 404) {
+      return null;
+    }
+
+    final body = json.decode(response.body);
+    throw Exception(body['error'] ?? 'Error obteniendo alumno vinculado');
+  }
+
+  static Future<List<TutorReporteMaestro>> getTutorReportes(int tutorId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/tutores/$tutorId/reportes'),
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body);
+      return data
+          .map(
+            (item) =>
+                TutorReporteMaestro.fromJson(item as Map<String, dynamic>),
+          )
+          .toList();
+    }
+
+    final body = json.decode(response.body);
+    throw Exception(body['error'] ?? 'Error obteniendo reportes del tutor');
+  }
+
+  static Future<void> enviarReporteTutorMaestro({
+    required int tutorId,
+    required String categoria,
+    required String titulo,
+    required String mensaje,
+    String? materia,
+    int? alumnoId,
+    SelectedReportAttachment? attachment,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/tutores/$tutorId/reportes'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'alumno_id': alumnoId,
+        'categoria': categoria,
+        'materia': materia,
+        'titulo': titulo,
+        'mensaje': mensaje,
+        if (attachment != null)
+          'attachment': {
+            'file_name': attachment.fileName,
+            'mime_type': attachment.mimeType,
+            'size_bytes': attachment.sizeBytes,
+            'base64': base64Encode(attachment.bytes),
+          },
+      }),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final body = json.decode(response.body);
+      throw Exception(body['error'] ?? 'Error al enviar reporte al maestro');
+    }
+  }
+
+  static Future<List<ReporteTutorDocente>> getReportesTutorProfesor(
+    int profesorId,
+  ) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/profesores/$profesorId/reportes_tutor'),
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body);
+      return data
+          .map(
+            (item) =>
+                ReporteTutorDocente.fromJson(item as Map<String, dynamic>),
+          )
+          .toList();
+    }
+
+    final body = json.decode(response.body);
+    throw Exception(body['error'] ?? 'Error obteniendo mensajes de padres');
+  }
+
+  static Future<AttendanceApiRecord> guardarAsistenciaClase({
+    required int claseId,
+    required DateTime fecha,
+    required List<AttendanceApiDetailDraft> detalles,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/asistencias'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'clase_id': claseId,
+        'fecha': fecha.toIso8601String().split('T').first,
+        'detalles': detalles.map((item) => item.toJson()).toList(),
+      }),
+    );
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final body = json.decode(response.body) as Map<String, dynamic>;
+      return AttendanceApiRecord.fromJson(body);
+    }
+
+    final body = json.decode(response.body);
+    throw Exception(body['error'] ?? 'Error al guardar asistencia');
+  }
+
+  static Future<List<AttendanceApiRecord>> getAsistenciasPorClase(
+    int claseId,
+  ) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/asistencias/clases/$claseId'),
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body);
+      return data
+          .map(
+            (item) =>
+                AttendanceApiRecord.fromJson(item as Map<String, dynamic>),
+          )
+          .toList();
+    }
+
+    final body = json.decode(response.body);
+    throw Exception(
+      body['error'] ?? 'Error al obtener historial de asistencia',
+    );
+  }
+
+  static Future<AttendanceApiRecord?> getAsistenciaPorId(int registroId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/asistencias/$registroId'),
+    );
+
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body) as Map<String, dynamic>;
+      return AttendanceApiRecord.fromJson(body);
+    }
+
+    if (response.statusCode == 404) {
+      return null;
+    }
+
+    final body = json.decode(response.body);
+    throw Exception(body['error'] ?? 'Error al obtener asistencia');
+  }
+
+  static Future<List<AttendanceApiStudentItem>> getAsistenciasPorAlumno(
+    int alumnoId,
+  ) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/asistencias/alumnos/$alumnoId'),
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body);
+      return data
+          .map(
+            (item) =>
+                AttendanceApiStudentItem.fromJson(item as Map<String, dynamic>),
+          )
+          .toList();
+    }
+
+    final body = json.decode(response.body);
+    throw Exception(body['error'] ?? 'Error al obtener asistencias del alumno');
+  }
+
   // 17. OBTENER HISTORIAL ACADÉMICO REAL
   static Future<Map<String, List<Materia>>> getHistorialAcademico(
     int alumnoId,
@@ -521,6 +858,20 @@ int _asInt(dynamic value) {
   return int.tryParse(value.toString()) ?? 0;
 }
 
+String _extractApiError(http.Response response, String fallback) {
+  try {
+    final body = json.decode(response.body);
+    if (body is Map<String, dynamic>) {
+      final error = body['error']?.toString().trim();
+      final message = body['message']?.toString().trim();
+      if (error != null && error.isNotEmpty) return error;
+      if (message != null && message.isNotEmpty) return message;
+    }
+  } catch (_) {}
+
+  return fallback;
+}
+
 // ==========================================
 // MODELOS (Incluidos aquí para facilitar la copia)
 // ==========================================
@@ -530,7 +881,10 @@ class GrupoFisico {
   final String nombre;
   GrupoFisico({required this.id, required this.nombre});
   factory GrupoFisico.fromJson(Map<String, dynamic> json) {
-    return GrupoFisico(id: json['id'], nombre: json['nombre']);
+    return GrupoFisico(
+      id: _asInt(json['id']),
+      nombre: json['nombre']?.toString() ?? '',
+    );
   }
 }
 
@@ -647,6 +1001,324 @@ class ActividadCalificacion {
       comentario: json['comentario']?.toString() ?? '',
       fecha: json['fecha']?.toString() ?? '',
       tipo: json['tipo']?.toString() ?? 'actividad',
+    );
+  }
+}
+
+class ActividadClaseResumen {
+  final int id;
+  final int claseId;
+  final String titulo;
+  final String descripcion;
+  final double valor;
+  final String fechaEntrega;
+  final bool cuentaParaFinal;
+  final int capturas;
+  final int entregados;
+  final int noEntregados;
+  final double? promedio;
+
+  const ActividadClaseResumen({
+    required this.id,
+    required this.claseId,
+    required this.titulo,
+    required this.descripcion,
+    required this.valor,
+    required this.fechaEntrega,
+    required this.cuentaParaFinal,
+    required this.capturas,
+    required this.entregados,
+    required this.noEntregados,
+    required this.promedio,
+  });
+
+  factory ActividadClaseResumen.fromJson(Map<String, dynamic> json) {
+    return ActividadClaseResumen(
+      id: _asInt(json['id']),
+      claseId: _asInt(json['clase_id']),
+      titulo: json['titulo']?.toString() ?? 'Actividad',
+      descripcion: json['descripcion']?.toString() ?? '',
+      valor: _asNullableDouble(json['valor']) ?? 0,
+      fechaEntrega: json['fecha_entrega']?.toString() ?? '',
+      cuentaParaFinal:
+          json['cuenta_para_final'] == true || json['cuenta_para_final'] == 1,
+      capturas: _asInt(json['capturas']),
+      entregados: _asInt(json['entregados']),
+      noEntregados: _asInt(json['no_entregados']),
+      promedio: _asNullableDouble(json['promedio']),
+    );
+  }
+}
+
+class ActividadAlumnoCaptura {
+  final int alumnoId;
+  final int id;
+  final String nombre;
+  final String correo;
+  final bool entregado;
+  final bool revisado;
+  final double? calificacion;
+  final String comentario;
+  final String estado;
+
+  const ActividadAlumnoCaptura({
+    required this.alumnoId,
+    required this.id,
+    required this.nombre,
+    required this.correo,
+    required this.entregado,
+    required this.revisado,
+    required this.calificacion,
+    required this.comentario,
+    required this.estado,
+  });
+
+  factory ActividadAlumnoCaptura.fromJson(Map<String, dynamic> json) {
+    return ActividadAlumnoCaptura(
+      alumnoId: _asInt(json['alumno_id']),
+      id: _asInt(json['id']),
+      nombre: json['nombre']?.toString() ?? 'Sin nombre',
+      correo: json['correo']?.toString() ?? 'Sin correo',
+      entregado: json['entregado'] == true || json['entregado'] == 1,
+      revisado: json['revisado'] == true || json['revisado'] == 1,
+      calificacion: _asNullableDouble(json['calificacion']),
+      comentario: json['comentario']?.toString() ?? '',
+      estado: json['estado']?.toString() ?? 'Sin revisar',
+    );
+  }
+
+  ActividadAlumnoCaptura copyWith({
+    bool? entregado,
+    bool? revisado,
+    double? calificacion,
+    bool clearCalificacion = false,
+    String? comentario,
+    String? estado,
+  }) {
+    return ActividadAlumnoCaptura(
+      alumnoId: alumnoId,
+      id: id,
+      nombre: nombre,
+      correo: correo,
+      entregado: entregado ?? this.entregado,
+      revisado: revisado ?? this.revisado,
+      calificacion: clearCalificacion
+          ? null
+          : (calificacion ?? this.calificacion),
+      comentario: comentario ?? this.comentario,
+      estado: estado ?? this.estado,
+    );
+  }
+
+  Map<String, dynamic> toPayload() {
+    return {
+      'alumno_id': alumnoId,
+      'entregado': entregado,
+      'calificacion': entregado ? calificacion : null,
+      'comentario': comentario,
+    };
+  }
+}
+
+class ActividadClaseDetalle {
+  final int id;
+  final int claseId;
+  final String titulo;
+  final String descripcion;
+  final double valor;
+  final String fechaEntrega;
+  final bool cuentaParaFinal;
+  final String grupoNombre;
+  final String materia;
+  final List<ActividadAlumnoCaptura> alumnos;
+
+  const ActividadClaseDetalle({
+    required this.id,
+    required this.claseId,
+    required this.titulo,
+    required this.descripcion,
+    required this.valor,
+    required this.fechaEntrega,
+    required this.cuentaParaFinal,
+    required this.grupoNombre,
+    required this.materia,
+    required this.alumnos,
+  });
+
+  factory ActividadClaseDetalle.fromJson(Map<String, dynamic> json) {
+    final alumnos = (json['alumnos'] as List? ?? const [])
+        .map(
+          (item) =>
+              ActividadAlumnoCaptura.fromJson(item as Map<String, dynamic>),
+        )
+        .toList();
+
+    return ActividadClaseDetalle(
+      id: _asInt(json['id']),
+      claseId: _asInt(json['clase_id']),
+      titulo: json['titulo']?.toString() ?? 'Actividad',
+      descripcion: json['descripcion']?.toString() ?? '',
+      valor: _asNullableDouble(json['valor']) ?? 0,
+      fechaEntrega: json['fecha_entrega']?.toString() ?? '',
+      cuentaParaFinal:
+          json['cuenta_para_final'] == true || json['cuenta_para_final'] == 1,
+      grupoNombre: json['grupo_nombre']?.toString() ?? '',
+      materia: json['materia']?.toString() ?? '',
+      alumnos: alumnos,
+    );
+  }
+}
+
+class ActividadFinalDetalle {
+  final int actividadId;
+  final String titulo;
+  final String descripcion;
+  final double valor;
+  final String fechaEntrega;
+  final bool cuentaParaFinal;
+  final bool entregado;
+  final bool revisado;
+  final double? calificacion;
+  final String comentario;
+  final String estado;
+
+  const ActividadFinalDetalle({
+    required this.actividadId,
+    required this.titulo,
+    required this.descripcion,
+    required this.valor,
+    required this.fechaEntrega,
+    required this.cuentaParaFinal,
+    required this.entregado,
+    required this.revisado,
+    required this.calificacion,
+    required this.comentario,
+    required this.estado,
+  });
+
+  factory ActividadFinalDetalle.fromJson(Map<String, dynamic> json) {
+    return ActividadFinalDetalle(
+      actividadId: _asInt(json['actividad_id']),
+      titulo: json['titulo']?.toString() ?? 'Actividad',
+      descripcion: json['descripcion']?.toString() ?? '',
+      valor: _asNullableDouble(json['valor']) ?? 0,
+      fechaEntrega: json['fecha_entrega']?.toString() ?? '',
+      cuentaParaFinal:
+          json['cuenta_para_final'] == true || json['cuenta_para_final'] == 1,
+      entregado: json['entregado'] == true || json['entregado'] == 1,
+      revisado: json['revisado'] == true || json['revisado'] == 1,
+      calificacion: _asNullableDouble(json['calificacion']),
+      comentario: json['comentario']?.toString() ?? '',
+      estado: json['estado']?.toString() ?? 'Sin revisar',
+    );
+  }
+}
+
+class ResumenFinalAlumno {
+  final int id;
+  final int alumnoId;
+  final String nombre;
+  final String correo;
+  final double? calificacionFinal;
+  final double? calificacionSugerida;
+  final double? promedioActividades;
+  final int totalActividades;
+  final int entregadas;
+  final int noEntregadas;
+  final int sinRegistrar;
+  final String ultimoComentario;
+  final List<ActividadFinalDetalle> actividades;
+
+  const ResumenFinalAlumno({
+    required this.id,
+    required this.alumnoId,
+    required this.nombre,
+    required this.correo,
+    required this.calificacionFinal,
+    required this.calificacionSugerida,
+    required this.promedioActividades,
+    required this.totalActividades,
+    required this.entregadas,
+    required this.noEntregadas,
+    required this.sinRegistrar,
+    required this.ultimoComentario,
+    required this.actividades,
+  });
+
+  factory ResumenFinalAlumno.fromJson(Map<String, dynamic> json) {
+    final actividades = (json['actividades'] as List? ?? const [])
+        .map(
+          (item) =>
+              ActividadFinalDetalle.fromJson(item as Map<String, dynamic>),
+        )
+        .toList();
+
+    return ResumenFinalAlumno(
+      id: _asInt(json['id']),
+      alumnoId: _asInt(json['alumno_id']),
+      nombre: json['nombre']?.toString() ?? 'Sin nombre',
+      correo: json['correo']?.toString() ?? 'Sin correo',
+      calificacionFinal: _asNullableDouble(json['calificacion_final']),
+      calificacionSugerida: _asNullableDouble(json['calificacion_sugerida']),
+      promedioActividades: _asNullableDouble(json['promedio_actividades']),
+      totalActividades: _asInt(json['total_actividades']),
+      entregadas: _asInt(json['entregadas']),
+      noEntregadas: _asInt(json['no_entregadas']),
+      sinRegistrar: _asInt(json['sin_registrar']),
+      ultimoComentario: json['ultimo_comentario']?.toString() ?? '',
+      actividades: actividades,
+    );
+  }
+
+  ResumenFinalAlumno copyWith({
+    double? calificacionFinal,
+    bool clearCalificacionFinal = false,
+  }) {
+    return ResumenFinalAlumno(
+      id: id,
+      alumnoId: alumnoId,
+      nombre: nombre,
+      correo: correo,
+      calificacionFinal: clearCalificacionFinal
+          ? null
+          : (calificacionFinal ?? this.calificacionFinal),
+      calificacionSugerida: calificacionSugerida,
+      promedioActividades: promedioActividades,
+      totalActividades: totalActividades,
+      entregadas: entregadas,
+      noEntregadas: noEntregadas,
+      sinRegistrar: sinRegistrar,
+      ultimoComentario: ultimoComentario,
+      actividades: actividades,
+    );
+  }
+}
+
+class ResumenFinalClase {
+  final int claseId;
+  final String grupoNombre;
+  final String materia;
+  final List<ResumenFinalAlumno> alumnos;
+
+  const ResumenFinalClase({
+    required this.claseId,
+    required this.grupoNombre,
+    required this.materia,
+    required this.alumnos,
+  });
+
+  factory ResumenFinalClase.fromJson(Map<String, dynamic> json) {
+    final alumnos = (json['alumnos'] as List? ?? const [])
+        .map(
+          (item) => ResumenFinalAlumno.fromJson(item as Map<String, dynamic>),
+        )
+        .toList();
+
+    return ResumenFinalClase(
+      claseId: _asInt(json['clase_id']),
+      grupoNombre: json['grupo_nombre']?.toString() ?? '',
+      materia: json['materia']?.toString() ?? '',
+      alumnos: alumnos,
     );
   }
 }
@@ -809,6 +1481,252 @@ class DashboardData {
       average: _asNullableDouble(json['average']) ?? 0,
       student: StudentData.fromJson(json['student'] as Map<String, dynamic>),
       subjects: subjectsList,
+    );
+  }
+}
+
+class TutorAlumnoVinculado {
+  final int id;
+  final String nombre;
+  final String correo;
+
+  const TutorAlumnoVinculado({
+    required this.id,
+    required this.nombre,
+    required this.correo,
+  });
+
+  factory TutorAlumnoVinculado.fromJson(Map<String, dynamic> json) {
+    return TutorAlumnoVinculado(
+      id: _asInt(json['id']),
+      nombre: json['nombre']?.toString() ?? 'Alumno vinculado',
+      correo: json['correo']?.toString() ?? 'Sin correo',
+    );
+  }
+}
+
+class TutorReporteMaestro {
+  final int id;
+  final String categoria;
+  final String materia;
+  final String titulo;
+  final String mensaje;
+  final String estado;
+  final String fecha;
+  final String adjuntoNombre;
+  final String adjuntoUrl;
+  final String adjuntoMimeType;
+  final int adjuntoTamano;
+
+  const TutorReporteMaestro({
+    required this.id,
+    required this.categoria,
+    required this.materia,
+    required this.titulo,
+    required this.mensaje,
+    required this.estado,
+    required this.fecha,
+    required this.adjuntoNombre,
+    required this.adjuntoUrl,
+    required this.adjuntoMimeType,
+    required this.adjuntoTamano,
+  });
+
+  bool get tieneAdjunto =>
+      adjuntoNombre.trim().isNotEmpty || adjuntoUrl.trim().isNotEmpty;
+
+  factory TutorReporteMaestro.fromJson(Map<String, dynamic> json) {
+    return TutorReporteMaestro(
+      id: _asInt(json['id']),
+      categoria: json['categoria']?.toString() ?? 'Reporte',
+      materia: json['materia']?.toString() ?? '',
+      titulo: json['titulo']?.toString() ?? 'Reporte del tutor',
+      mensaje: json['mensaje']?.toString() ?? '',
+      estado: json['estado']?.toString() ?? 'Enviado',
+      fecha: json['fecha']?.toString() ?? '',
+      adjuntoNombre: json['adjunto_nombre']?.toString() ?? '',
+      adjuntoUrl: json['adjunto_url']?.toString() ?? '',
+      adjuntoMimeType: json['adjunto_mime_type']?.toString() ?? '',
+      adjuntoTamano: _asInt(json['adjunto_tamano']),
+    );
+  }
+}
+
+class ReporteTutorDocente {
+  final int id;
+  final int tutorId;
+  final int alumnoId;
+  final String categoria;
+  final String materia;
+  final String titulo;
+  final String mensaje;
+  final String estado;
+  final String fecha;
+  final String tutorNombre;
+  final String alumnoNombre;
+  final String adjuntoNombre;
+  final String adjuntoUrl;
+  final String adjuntoMimeType;
+  final int adjuntoTamano;
+
+  const ReporteTutorDocente({
+    required this.id,
+    required this.tutorId,
+    required this.alumnoId,
+    required this.categoria,
+    required this.materia,
+    required this.titulo,
+    required this.mensaje,
+    required this.estado,
+    required this.fecha,
+    required this.tutorNombre,
+    required this.alumnoNombre,
+    required this.adjuntoNombre,
+    required this.adjuntoUrl,
+    required this.adjuntoMimeType,
+    required this.adjuntoTamano,
+  });
+
+  bool get tieneAdjunto =>
+      adjuntoNombre.trim().isNotEmpty || adjuntoUrl.trim().isNotEmpty;
+
+  factory ReporteTutorDocente.fromJson(Map<String, dynamic> json) {
+    return ReporteTutorDocente(
+      id: _asInt(json['id']),
+      tutorId: _asInt(json['tutor_id']),
+      alumnoId: _asInt(json['alumno_id']),
+      categoria: json['categoria']?.toString() ?? 'Reporte',
+      materia: json['materia']?.toString() ?? '',
+      titulo: json['titulo']?.toString() ?? 'Mensaje del tutor',
+      mensaje: json['mensaje']?.toString() ?? '',
+      estado: json['estado']?.toString() ?? 'En revision',
+      fecha: json['fecha']?.toString() ?? '',
+      tutorNombre: json['tutor_nombre']?.toString() ?? 'Tutor',
+      alumnoNombre: json['alumno_nombre']?.toString() ?? 'Alumno',
+      adjuntoNombre: json['adjunto_nombre']?.toString() ?? '',
+      adjuntoUrl: json['adjunto_url']?.toString() ?? '',
+      adjuntoMimeType: json['adjunto_mime_type']?.toString() ?? '',
+      adjuntoTamano: _asInt(json['adjunto_tamano']),
+    );
+  }
+}
+
+class AttendanceApiDetailDraft {
+  final int alumnoId;
+  final String estado;
+  final String nota;
+
+  const AttendanceApiDetailDraft({
+    required this.alumnoId,
+    required this.estado,
+    required this.nota,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'alumno_id': alumnoId,
+    'estado': estado,
+    'nota': nota,
+  };
+}
+
+class AttendanceApiDetail {
+  final int alumnoId;
+  final String nombre;
+  final String correo;
+  final String estado;
+  final String nota;
+
+  const AttendanceApiDetail({
+    required this.alumnoId,
+    required this.nombre,
+    required this.correo,
+    required this.estado,
+    required this.nota,
+  });
+
+  factory AttendanceApiDetail.fromJson(Map<String, dynamic> json) {
+    return AttendanceApiDetail(
+      alumnoId: _asInt(json['alumno_id']),
+      nombre: json['nombre']?.toString() ?? 'Sin nombre',
+      correo: json['correo']?.toString() ?? 'Sin correo',
+      estado: json['estado']?.toString() ?? 'ausente',
+      nota: json['nota']?.toString() ?? '',
+    );
+  }
+}
+
+class AttendanceApiRecord {
+  final int id;
+  final int grupoId;
+  final String grupoNombre;
+  final String materia;
+  final String fecha;
+  final List<AttendanceApiDetail> detalles;
+
+  const AttendanceApiRecord({
+    required this.id,
+    required this.grupoId,
+    required this.grupoNombre,
+    required this.materia,
+    required this.fecha,
+    required this.detalles,
+  });
+
+  factory AttendanceApiRecord.fromJson(Map<String, dynamic> json) {
+    final detalles = (json['detalles'] as List? ?? const [])
+        .map(
+          (item) => AttendanceApiDetail.fromJson(item as Map<String, dynamic>),
+        )
+        .toList();
+
+    return AttendanceApiRecord(
+      id: _asInt(json['id']),
+      grupoId: _asInt(json['grupo_id']),
+      grupoNombre: json['grupo_nombre']?.toString() ?? 'Grupo',
+      materia: json['materia']?.toString() ?? 'Materia',
+      fecha: json['fecha']?.toString() ?? '',
+      detalles: detalles,
+    );
+  }
+}
+
+class AttendanceApiStudentItem {
+  final int registroId;
+  final int claseId;
+  final String grupoNombre;
+  final String materia;
+  final String fecha;
+  final int alumnoId;
+  final String alumnoNombre;
+  final String alumnoCorreo;
+  final String estado;
+  final String nota;
+
+  const AttendanceApiStudentItem({
+    required this.registroId,
+    required this.claseId,
+    required this.grupoNombre,
+    required this.materia,
+    required this.fecha,
+    required this.alumnoId,
+    required this.alumnoNombre,
+    required this.alumnoCorreo,
+    required this.estado,
+    required this.nota,
+  });
+
+  factory AttendanceApiStudentItem.fromJson(Map<String, dynamic> json) {
+    return AttendanceApiStudentItem(
+      registroId: _asInt(json['registro_id']),
+      claseId: _asInt(json['clase_id']),
+      grupoNombre: json['grupo_nombre']?.toString() ?? 'Grupo',
+      materia: json['materia']?.toString() ?? 'Materia',
+      fecha: json['fecha']?.toString() ?? '',
+      alumnoId: _asInt(json['alumno_id']),
+      alumnoNombre: json['alumno_nombre']?.toString() ?? 'Sin nombre',
+      alumnoCorreo: json['alumno_correo']?.toString() ?? 'Sin correo',
+      estado: json['estado']?.toString() ?? 'ausente',
+      nota: json['nota']?.toString() ?? '',
     );
   }
 }

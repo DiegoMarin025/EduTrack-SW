@@ -23,7 +23,7 @@ class TeacherNavigationHelper {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              "Aun no tienes grupos o materias. Ve a Mis Grupos y crea una materia.",
+              "Aun no tienes grupos o materias. Ve a Mis Grupos y crea tu primer grupo.",
             ),
           ),
         );
@@ -143,10 +143,8 @@ class TeacherNavigationHelper {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => PasarListaScreen(
-          grupo: representative,
-          alumnos: alumnos,
-        ),
+        builder: (_) =>
+            PasarListaScreen(grupo: representative, alumnos: alumnos),
       ),
     );
   }

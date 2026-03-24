@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'detalle_grupo_screen.dart';
+import 'subir_calificaciones_screen.dart';
 import 'teacher_navigation_helper.dart';
 
 class MateriaHomeScreen extends StatefulWidget {
@@ -55,13 +56,11 @@ class _MateriaHomeScreenState extends State<MateriaHomeScreen> {
   }
 
   void _abrirCalificacionesRapidas() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _CalificacionesRapidasSheet(
-        materia: widget.materia,
-        grupo: widget.representative,
-        alumnos: _alumnos,
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            SubirCalificacionesScreen(initialGrupoId: widget.representative.id),
       ),
     );
   }
@@ -107,11 +106,9 @@ class _MateriaHomeScreenState extends State<MateriaHomeScreen> {
                   const SizedBox(height: 10),
                   _ActionCard(
                     icon: Icons.grade_rounded,
-                    title: "Calificaciones rapidas",
-                    subtitle: "Captura rapida por alumno (0-10)",
-                    onTap: _alumnos.isEmpty
-                        ? null
-                        : _abrirCalificacionesRapidas,
+                    title: "Calificaciones",
+                    subtitle: "Actividades, entregas y cierre final",
+                    onTap: _abrirCalificacionesRapidas,
                   ),
                   const SizedBox(height: 10),
                   _ActionCard(

@@ -84,6 +84,18 @@ class _LoginPageState extends State<LoginPage>
       final int userId = usuario['id'];
       await prefs.setInt('saved_id', userId);
       await prefs.setString('saved_name', usuario['nombre']);
+      int? linkedStudentId = int.tryParse(
+        (usuario['alumno_id_vinculado'] ?? '').toString(),
+      );
+      if (rolReal == 'tutor' && (linkedStudentId == null || linkedStudentId <= 0)) {
+        final linked = await ApiService.getTutorAlumnoVinculado(userId);
+        linkedStudentId = linked?.id;
+      }
+      if (linkedStudentId != null && linkedStudentId > 0) {
+        await prefs.setInt('saved_linked_student_id', linkedStudentId);
+      } else {
+        await prefs.remove('saved_linked_student_id');
+      }
 
       if (mounted) {
         _navegarAlHome(usuario, rolReal);

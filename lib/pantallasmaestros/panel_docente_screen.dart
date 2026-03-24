@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../pantallas/ayuda_screen.dart';
 import '../services/api_service.dart';
+import 'mensajes_padres_screen.dart';
 import 'materia_home_screen.dart';
 import 'mis_grupos_screen.dart';
 import 'subir_calificaciones_screen.dart';
@@ -87,14 +88,15 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
         _isLoading = false;
 
         if (gruposAsignados.isNotEmpty) {
-          final primeraClase = gruposAsignados.first;
+          final primeraClase = _pickFeaturedClass(gruposAsignados);
           _claseEnCursoGrupo = primeraClase;
           _claseEnCurso = primeraClase.materia;
-          _subClaseEnCurso = "Grupo ${primeraClase.nombre}";
+          _subClaseEnCurso =
+              "Grupo ${primeraClase.nombre} | Lista y calificaciones disponibles";
         } else {
           _claseEnCursoGrupo = null;
-          _claseEnCurso = "Sin clases asignadas";
-          _subClaseEnCurso = "Ve a Mis Grupos";
+          _claseEnCurso = "Sin materias asignadas";
+          _subClaseEnCurso = "Ve a Mis Grupos y crea tu primer grupo";
         }
       });
     } catch (_) {
@@ -102,9 +104,27 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
       setState(() {
         _isLoading = false;
         _claseEnCursoGrupo = null;
+        _claseEnCurso = "No se pudo cargar tu materia";
+        _subClaseEnCurso = "Intenta actualizar o revisa tu conexion";
         _errorMsg = "Error al conectar con el servidor.";
       });
     }
+  }
+
+  Grupo _pickFeaturedClass(List<Grupo> groups) {
+    final sorted = List<Grupo>.from(groups)
+      ..sort((a, b) {
+        final groupCompare = a.nombre.toLowerCase().compareTo(
+          b.nombre.toLowerCase(),
+        );
+        if (groupCompare != 0) {
+          return groupCompare;
+        }
+
+        return a.materia.toLowerCase().compareTo(b.materia.toLowerCase());
+      });
+
+    return sorted.first;
   }
 
   // ======================================================
@@ -116,7 +136,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
       profesorId: _profesorId,
     );
 
-/*
+    /*
     if (_profesorId == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("No se encontró el profesor.")),
@@ -134,7 +154,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              "Aún no tienes grupos/materias. Ve a Mis Grupos y crea una materia.",
+              "Aun no tienes grupos o materias. Ve a Mis Grupos y crea tu primer grupo.",
             ),
           ),
         );
@@ -277,6 +297,22 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
 
   void _abrirSoporte() {
     _abrirApartado(4);
+  }
+
+  void _abrirMensajesPadres() {
+    if (_profesorId <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No se encontro el profesor.")),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MensajesPadresScreen(profesorId: _profesorId),
+      ),
+    );
   }
 
   void _abrirClaseEnCurso() {
@@ -489,7 +525,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    "Clase en curso",
+                    "Materia disponible",
                     style: TextStyle(
                       color: Colors.white70,
                       fontSize: 12,
@@ -525,7 +561,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
             const SizedBox(width: 10),
             _pill(
               icon: Icons.arrow_forward_rounded,
-              text: "Ver",
+              text: "Abrir",
               onTap: _abrirClaseEnCurso,
             ),
           ],
@@ -649,11 +685,11 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
         onTap: _abrirMaterias,
       ),
       _ActionItem(
-        title: "Soporte",
-        subtitle: "Ayuda del sistema",
-        icon: Icons.support_agent_rounded,
+        title: "Padres",
+        subtitle: "Comentarios y justificaciones",
+        icon: Icons.family_restroom_rounded,
         tint: const Color(0xFF8B5CF6),
-        onTap: _abrirSoporte,
+        onTap: _abrirMensajesPadres,
       ),
     ];
 
@@ -729,7 +765,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
     return Column(
       children: [
         _feedCard(
-          badge: "EN CLASE",
+          badge: "ACCESO RAPIDO",
           badgeColor: primaryBlue,
           title: _claseEnCurso,
           subtitle: _subClaseEnCurso.isNotEmpty

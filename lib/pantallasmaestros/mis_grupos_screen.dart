@@ -111,15 +111,22 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
   @override
   Widget build(BuildContext context) {
     final bundles = _buildBundles();
+    final width = MediaQuery.of(context).size.width;
+    final fabRightInset = width >= 1100
+        ? 170.0
+        : (width >= 800 ? 154.0 : 138.0);
 
     return Scaffold(
       backgroundColor: bgLight,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _abrirDialogoCrear,
-        label: const Text("Nueva materia"),
-        icon: const Icon(Icons.add_rounded),
-        backgroundColor: primaryBlue,
-        foregroundColor: Colors.white,
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(right: fabRightInset),
+        child: FloatingActionButton.extended(
+          onPressed: _abrirDialogoCrear,
+          label: const Text("Grupo o materia"),
+          icon: const Icon(Icons.add_rounded),
+          backgroundColor: primaryBlue,
+          foregroundColor: Colors.white,
+        ),
       ),
       body: SafeArea(
         child: _loading
@@ -207,8 +214,7 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
                           },
                           onPasarLista: () {
                             final representative = bundle.items.first;
-                            TeacherNavigationHelper
-                                .openAttendanceForRepresentative(
+                            TeacherNavigationHelper.openAttendanceForRepresentative(
                               context: context,
                               representative: representative,
                             );
@@ -282,7 +288,7 @@ class _OnboardingEmpty extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            "Crea tu primer grupo y agrega una materia. Luego podrás registrar alumnos y pasar lista.",
+            "Crea tu primer grupo, ponle nombre y agrega una materia. Luego podras registrar alumnos y pasar lista.",
             style: TextStyle(
               color: textSoft,
               fontSize: 13.5,
@@ -300,7 +306,7 @@ class _OnboardingEmpty extends StatelessWidget {
             onPressed: onCreate,
             icon: const Icon(Icons.add_rounded),
             label: const Text(
-              "Crear mi primer grupo/materia",
+              "Crear mi primer grupo",
               style: TextStyle(fontWeight: FontWeight.w800),
             ),
           ),

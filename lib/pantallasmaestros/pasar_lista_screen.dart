@@ -23,6 +23,7 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
   final Color bgLight = const Color(0xFFF8FAFC);
 
   late DateTime _fecha;
+  late List<Alumno> _alumnos;
   final Map<int, EstadoAsistencia> _estadoPorAlumno = {};
   final Map<int, TextEditingController> _notaPorAlumno = {};
   bool _saving = false;
@@ -31,11 +32,8 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
   void initState() {
     super.initState();
     _fecha = DateTime.now();
-
-    for (final a in widget.alumnos) {
-      _estadoPorAlumno[a.id] = EstadoAsistencia.ausente;
-      _notaPorAlumno[a.id] = TextEditingController();
-    }
+    _alumnos = [];
+    _sincronizarAlumnos(widget.alumnos);
   }
 
   @override
@@ -63,7 +61,7 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
 
   void _marcarTodos(EstadoAsistencia estado) {
     setState(() {
-      for (final a in widget.alumnos) {
+      for (final a in _alumnos) {
         _estadoPorAlumno[a.id] = estado;
       }
     });
@@ -94,7 +92,7 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Nota para ${alumno.nombre}',
+                'Nota para ${alumno.nombre} | ID ${alumno.id}',
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
@@ -136,14 +134,14 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
 
     try {
       final notas = <int, String>{};
-      for (final a in widget.alumnos) {
+      for (final a in _alumnos) {
         notas[a.id] = _notaPorAlumno[a.id]?.text.trim() ?? '';
       }
 
       await AsistenciaService.guardarAsistencia(
         grupo: widget.grupo,
         fecha: _fecha,
-        alumnos: widget.alumnos,
+        alumnos: _alumnos,
         estados: _estadoPorAlumno,
         notas: notas,
       );
@@ -173,6 +171,121 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
       );
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _sincronizarAlumnos(List<Alumno> alumnos) {
+    final ordered = List<Alumno>.from(
+      alumnos,
+    )..sort((a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()));
+    final validIds = ordered.map((alumno) => alumno.id).toSet();
+
+    final idsToRemove = _notaPorAlumno.keys
+        .where((id) => !validIds.contains(id))
+        .toList();
+    for (final id in idsToRemove) {
+      _notaPorAlumno.remove(id)?.dispose();
+      _estadoPorAlumno.remove(id);
+    }
+
+    for (final alumno in ordered) {
+      _estadoPorAlumno.putIfAbsent(alumno.id, () => EstadoAsistencia.ausente);
+      _notaPorAlumno.putIfAbsent(alumno.id, () => TextEditingController());
+    }
+
+    _alumnos = ordered;
+  }
+
+  Future<void> _mostrarDialogoAgregarAlumno() async {
+    final nombreController = TextEditingController();
+    final correoController = TextEditingController();
+
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Registrar alumno'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nombreController,
+                decoration: const InputDecoration(labelText: 'Nombre completo'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: correoController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Correo electronico',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryBlue,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                final nombre = nombreController.text.trim();
+                final correo = correoController.text.trim();
+
+                if (nombre.isEmpty || correo.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Completa nombre y correo del alumno'),
+                    ),
+                  );
+                  return;
+                }
+
+                try {
+                  final nuevoAlumno = await ApiService.crearAlumno(
+                    nombre: nombre,
+                    correo: correo,
+                  );
+
+                  await ApiService.agregarAlumnoAGrupo(
+                    nuevoAlumno.id,
+                    widget.grupo.grupoIdReal,
+                  );
+
+                  final alumnosActualizados =
+                      await ApiService.getAlumnosRegistrados(widget.grupo);
+
+                  if (!mounted) return;
+
+                  setState(() {
+                    _sincronizarAlumnos(alumnosActualizados);
+                  });
+
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Alumno registrado correctamente'),
+                    ),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      nombreController.dispose();
+      correoController.dispose();
     }
   }
 
@@ -420,6 +533,26 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
                   child: Icon(Icons.tune_rounded, color: primaryBlue),
                 ),
               ),
+              const SizedBox(width: 10),
+              Tooltip(
+                message: 'Registrar alumno',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: _mostrarDialogoAgregarAlumno,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      color: Colors.white,
+                    ),
+                    child: Icon(
+                      Icons.person_add_alt_1_rounded,
+                      color: primaryBlue,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -444,7 +577,55 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFBFDBFE)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.badge_rounded, color: Color(0xFF1D4ED8), size: 20),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Comparte el ID del alumno con su tutor para que pueda registrarse y vincular su cuenta.',
+                    style: TextStyle(
+                      color: Color(0xFF1E3A8A),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12.8,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStudentIdChip(int alumnoId, {bool compact = false}) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 10,
+        vertical: compact ? 5 : 6,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFBFDBFE)),
+      ),
+      child: Text(
+        'ID: $alumnoId',
+        style: TextStyle(
+          color: const Color(0xFF1D4ED8),
+          fontWeight: FontWeight.w900,
+          fontSize: compact ? 11.5 : 12.2,
+        ),
       ),
     );
   }
@@ -504,6 +685,11 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Registrar alumno',
+            onPressed: _mostrarDialogoAgregarAlumno,
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+          ),
+          IconButton(
             onPressed: () {
               Navigator.push(
                 context,
@@ -522,13 +708,13 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
         children: [
           _buildHeader(),
           Expanded(
-            child: widget.alumnos.isEmpty
+            child: _alumnos.isEmpty
                 ? const Center(child: Text('No hay alumnos en este grupo'))
                 : ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    itemCount: widget.alumnos.length,
+                    itemCount: _alumnos.length,
                     itemBuilder: (context, index) {
-                      final a = widget.alumnos[index];
+                      final a = _alumnos[index];
                       final nota = _notaPorAlumno[a.id]?.text.trim() ?? '';
 
                       return Container(
@@ -570,6 +756,8 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
                                         ),
                                       ),
                                       const SizedBox(height: 4),
+                                      _buildStudentIdChip(a.id),
+                                      const SizedBox(height: 6),
                                       Text(
                                         a.correo,
                                         style: const TextStyle(
@@ -649,6 +837,11 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Registrar alumno',
+            onPressed: _mostrarDialogoAgregarAlumno,
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+          ),
+          IconButton(
             onPressed: () {
               Navigator.push(
                 context,
@@ -667,7 +860,7 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
         children: [
           _buildHeader(),
           Expanded(
-            child: widget.alumnos.isEmpty
+            child: _alumnos.isEmpty
                 ? const Center(child: Text('No hay alumnos en este grupo'))
                 : Padding(
                     padding: const EdgeInsets.all(16),
@@ -681,7 +874,7 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: SizedBox(
-                          width: 980,
+                          width: 1100,
                           child: Column(
                             children: [
                               Row(
@@ -692,6 +885,11 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
                                     alignment: Alignment.center,
                                   ),
                                   _buildHeaderCell('Alumno', width: 250),
+                                  _buildHeaderCell(
+                                    'ID alumno',
+                                    width: 110,
+                                    alignment: Alignment.center,
+                                  ),
                                   _buildHeaderCell(
                                     'Presente',
                                     width: 120,
@@ -712,9 +910,9 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
                               ),
                               Expanded(
                                 child: ListView.builder(
-                                  itemCount: widget.alumnos.length,
+                                  itemCount: _alumnos.length,
                                   itemBuilder: (context, index) {
-                                    final a = widget.alumnos[index];
+                                    final a = _alumnos[index];
 
                                     return Row(
                                       crossAxisAlignment:
@@ -760,6 +958,14 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
                                                 ),
                                               ),
                                             ],
+                                          ),
+                                        ),
+                                        _buildBodyCell(
+                                          width: 110,
+                                          alignment: Alignment.center,
+                                          child: _buildStudentIdChip(
+                                            a.id,
+                                            compact: true,
                                           ),
                                         ),
                                         _buildBodyCell(

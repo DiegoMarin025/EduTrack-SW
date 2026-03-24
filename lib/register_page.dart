@@ -1,26 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'services/api_service.dart';
+
 import 'login_page.dart';
 import 'main_layout.dart';
 import 'pantallasmaestros/main_layout_maestros_screen.dart';
+import 'services/api_service.dart';
 
 class RegisterPage extends StatefulWidget {
+  const RegisterPage({super.key});
+
   @override
-  _RegisterPageState createState() => _RegisterPageState();
+  State<RegisterPage> createState() => _RegisterPageState();
 }
 
 class _RegisterPageState extends State<RegisterPage> {
-  // Controladores
   final TextEditingController nameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController confirmPasswordController =
       TextEditingController();
   final TextEditingController _matriculaHijoController =
-      TextEditingController(); // Agregado para el Tutor
+      TextEditingController();
 
-  String userType = "Alumno";
+  String userType = "Tutor";
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -31,124 +33,134 @@ class _RegisterPageState extends State<RegisterPage> {
     emailController.dispose();
     passwordController.dispose();
     confirmPasswordController.dispose();
+    _matriculaHijoController.dispose();
     super.dispose();
   }
 
-  void register() async {
-    // 1. Validar campos vacíos
+  Future<void> register() async {
     if (nameController.text.isEmpty ||
         emailController.text.isEmpty ||
         passwordController.text.isEmpty ||
         confirmPasswordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Por favor completa todos los campos")),
-      );
+      _showSnackBar("Por favor completa todos los campos");
       return;
     }
 
-    // 2. Validar coincidencia
     if (passwordController.text != confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Las contraseñas no coinciden")),
-      );
+      _showSnackBar("Las contraseñas no coinciden");
       return;
     }
 
-    // 3. Validar longitud
     if (passwordController.text.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("La contraseña debe tener al menos 6 caracteres"),
-        ),
-      );
+      _showSnackBar("La contraseña debe tener al menos 6 caracteres");
+      return;
+    }
+
+    if (userType == "Tutor" && _matriculaHijoController.text.trim().isEmpty) {
+      _showSnackBar("Ingresa la matrícula o ID del alumno a vincular");
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      // 4. Registro en DB (AQUÍ SÍ ENVIAMOS EL userType)
       await ApiService.registerUser(
         nameController.text.trim(),
         emailController.text.trim(),
         passwordController.text.trim(),
-        userType, // <--- Correcto: El registro necesita saber qué rol crear
+        userType,
+        matriculaHijo: userType == "Tutor"
+            ? _matriculaHijoController.text.trim()
+            : null,
       );
 
-      // 5. Auto-Login (CORREGIDO: YA NO ENVIAMOS userType)
-      // La API ahora detecta el rol automáticamente
       final usuario = await ApiService.loginUser(
         emailController.text.trim(),
         passwordController.text.trim(),
-        // userType, <--- ELIMINADO: Esto causaba el error
       );
 
-      // 6. Guardar sesión
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('saved_username', emailController.text.trim());
       await prefs.setString('saved_password', passwordController.text.trim());
-      await prefs.setString('saved_userType', userType);
+      await prefs.setString(
+        'saved_userType',
+        (usuario['rol'] ?? userType).toString().toLowerCase(),
+      );
       await prefs.setString('saved_name', usuario['nombre']);
 
       final int userId = int.tryParse(usuario['id'].toString()) ?? 0;
       await prefs.setInt('saved_id', userId);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("¡Bienvenido ${usuario['nombre']}!"),
-            backgroundColor: Colors.green,
-          ),
-        );
-        // Navegar
-        _navegarAlHome(userId);
+      int? linkedStudentId = int.tryParse(
+        (usuario['alumno_id_vinculado'] ?? '').toString(),
+      );
+      final rolReal = (usuario['rol'] ?? userType).toString().toLowerCase();
+      if (rolReal == 'tutor' && (linkedStudentId == null || linkedStudentId <= 0)) {
+        final linked = await ApiService.getTutorAlumnoVinculado(userId);
+        linkedStudentId = linked?.id;
       }
+      if (linkedStudentId != null && linkedStudentId > 0) {
+        await prefs.setInt('saved_linked_student_id', linkedStudentId);
+      } else {
+        await prefs.remove('saved_linked_student_id');
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Bienvenido ${usuario['nombre']}"),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      _navegarAlHome(userId);
     } catch (e) {
-      if (mounted) {
-        final errorMessage = e.toString().replaceAll('Exception: ', '');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white),
-                const SizedBox(width: 10),
-                Expanded(child: Text(errorMessage)),
-              ],
-            ),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+      if (!mounted) {
+        return;
       }
+
+      _showSnackBar(
+        e.toString().replaceAll('Exception: ', ''),
+        backgroundColor: Colors.red,
+      );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+  void _showSnackBar(String message, {Color? backgroundColor}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: backgroundColor,
+      ),
+    );
   }
 
   void _navegarAlHome(int userId) {
     final raw = nameController.text.trim();
-    final displayName = raw.isNotEmpty ? raw.split(' ')[0] : 'Usuario';
+    final displayName = raw.isNotEmpty ? raw.split(' ').first : 'Usuario';
 
     if (userType == "Maestro" || userType == "Profesor") {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const MainLayoutMaestros()),
       );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              MainLayout(username: displayName, usuarioId: userId),
-        ),
-      );
+      return;
     }
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            MainLayout(username: displayName, usuarioId: userId),
+      ),
+    );
   }
 
   @override
@@ -184,61 +196,61 @@ class _RegisterPageState extends State<RegisterPage> {
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 20),
-
-                // Nombre
                 TextField(
                   controller: nameController,
-                  decoration: InputDecoration(
-                    labelText: "Nombre completo",
-                    prefixIcon: const Icon(Icons.person_outline),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
+                  decoration: _decoration(
+                    "Nombre completo",
+                    Icons.person_outline,
                   ),
                 ),
                 const SizedBox(height: 15),
-
-                // Correo
                 TextField(
                   controller: emailController,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    labelText: "Correo electrónico",
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
+                  decoration: _decoration(
+                    "Correo electrónico",
+                    Icons.email_outlined,
                   ),
                 ),
                 const SizedBox(height: 15),
-
-                // Tipo usuario
                 DropdownButtonFormField<String>(
                   value: userType,
                   items: const [
-                    DropdownMenuItem(value: "Alumno", child: Text("Alumno")),
+                    DropdownMenuItem(
+                      value: "Tutor",
+                      child: Text("Padre/Tutor"),
+                    ),
                     DropdownMenuItem(value: "Maestro", child: Text("Maestro")),
                   ],
                   onChanged: (value) {
-                    setState(() => userType = value.toString());
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() => userType = value);
                   },
-                  decoration: InputDecoration(
-                    labelText: "Tipo de usuario",
-                    prefixIcon: const Icon(Icons.school_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
+                  decoration: _decoration(
+                    "Tipo de usuario",
+                    Icons.school_outlined,
                   ),
                 ),
                 const SizedBox(height: 15),
-
-                // --- CONTRASEÑA (CON OJITO) ---
+                if (userType == "Tutor") ...[
+                  TextField(
+                    controller: _matriculaHijoController,
+                    keyboardType: TextInputType.number,
+                    decoration: _decoration(
+                      "Matrícula o ID del alumno",
+                      Icons.badge_outlined,
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                ],
                 TextField(
                   controller: passwordController,
-                  obscureText: _obscurePassword, // Variable de estado
-                  decoration: InputDecoration(
-                    labelText: "Contraseña",
-                    prefixIcon: const Icon(Icons.lock_outline),
+                  obscureText: _obscurePassword,
+                  decoration: _decoration(
+                    "Contraseña",
+                    Icons.lock_outline,
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscurePassword
@@ -252,20 +264,15 @@ class _RegisterPageState extends State<RegisterPage> {
                         });
                       },
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
                   ),
                 ),
                 const SizedBox(height: 15),
-
-                // --- CONFIRMAR CONTRASEÑA ---
                 TextField(
                   controller: confirmPasswordController,
-                  obscureText: _obscureConfirmPassword, // Variable de estado
-                  decoration: InputDecoration(
-                    labelText: "Confirmar Contraseña",
-                    prefixIcon: const Icon(Icons.lock_reset),
+                  obscureText: _obscureConfirmPassword,
+                  decoration: _decoration(
+                    "Confirmar contraseña",
+                    Icons.lock_reset,
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscureConfirmPassword
@@ -275,25 +282,20 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                       onPressed: () {
                         setState(() {
-                          _obscureConfirmPassword = !_obscureConfirmPassword;
+                          _obscureConfirmPassword =
+                              !_obscureConfirmPassword;
                         });
                       },
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
                   ),
                 ),
-
                 const SizedBox(height: 20),
-
-                // Botón Registrar
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : register,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Color(0xFF1E3A8A),
+                      backgroundColor: const Color(0xFF1E3A8A),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 15),
                       shape: RoundedRectangleBorder(
@@ -316,8 +318,6 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                 ),
                 const SizedBox(height: 10),
-
-                // Ir al Login
                 TextButton(
                   onPressed: () {
                     Navigator.push(
@@ -337,70 +337,18 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    String? hint,
-    TextInputType? keyboardType,
-    required String? Function(String?) validator,
+  InputDecoration _decoration(
+    String label,
+    IconData icon, {
+    Widget? suffixIcon,
   }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: Icon(icon, color: Colors.blue[900]),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey[300]!),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.blue[900]!, width: 2),
-        ),
-        filled: true,
-        fillColor: Colors.grey[50],
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon),
+      suffixIcon: suffixIcon,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15),
       ),
-      validator: validator,
-    );
-  }
-
-  Widget _buildPasswordField({
-    required TextEditingController controller,
-    required String label,
-    required bool obscure,
-    required VoidCallback onToggle,
-    required String? Function(String?) validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obscure,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(Icons.lock_outline, color: Colors.blue[900]),
-        suffixIcon: IconButton(
-          icon: Icon(
-            obscure ? Icons.visibility_off : Icons.visibility,
-            color: Colors.blue[900],
-          ),
-          onPressed: onToggle,
-        ),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey[300]!),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.blue[900]!, width: 2),
-        ),
-        filled: true,
-        fillColor: Colors.grey[50],
-      ),
-      validator: validator,
     );
   }
 }
