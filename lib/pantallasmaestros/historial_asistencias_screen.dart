@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 import '../services/api_service.dart';
 import '../services/asistencia_service.dart';
 import 'detalle_asistencia_screen.dart';
@@ -22,13 +23,56 @@ class _HistorialAsistenciasScreenState
   @override
   void initState() {
     super.initState();
-    _future = AsistenciaService.obtenerHistorialPorGrupo(widget.grupo.id);
+    _future = _obtenerHistorialFirebase();
   }
 
-  Future<void> _recargar() async {
+  void _recargar() {
     setState(() {
-      _future = AsistenciaService.obtenerHistorialPorGrupo(widget.grupo.id);
+      _future = _obtenerHistorialFirebase();
     });
+  }
+
+  // ======================================================
+  // 💾 LÓGICA DE FIREBASE (Historial)
+  // ======================================================
+  Future<List<AsistenciaRegistro>> _obtenerHistorialFirebase() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('asistencias')
+          .where('grupoIdReal', isEqualTo: widget.grupo.grupoIdReal)
+          .orderBy('fecha', descending: true)
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        final List<dynamic> detallesRaw = data['detalles'] ?? [];
+        
+        final detalles = detallesRaw.map((d) => AsistenciaAlumno(
+          alumnoId: d['alumnoId'] ?? 0,
+          nombreAlumno: d['nombreAlumno'] ?? '',
+          correoAlumno: d['correoAlumno'] ?? '',
+          estado: EstadoAsistencia.values.firstWhere(
+            (e) => e.toString().split('.').last == d['estado'],
+            orElse: () => EstadoAsistencia.ausente,
+          ),
+          nota: d['nota'] ?? '',
+        )).toList();
+
+        // 🟢 AQUÍ ESTABA EL ARREGLO:
+        return AsistenciaRegistro(
+          id: doc.id.hashCode,
+          fecha: (data['fecha'] as Timestamp).toDate(),
+          materia: data['materia'] ?? '',
+          grupoNombre: data['grupoNombre'] ?? '',
+          grupoId: data['grupoIdReal'] ?? 0, // <--- Agregamos este que es obligatorio
+          detalles: detalles,
+          // Quitamos presentes, ausentes y retardos de aquí porque tu modelo no los pide
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint("Error en historial: $e");
+      return [];
+    }
   }
 
   String _fechaTexto(DateTime fecha) {
@@ -51,14 +95,14 @@ class _HistorialAsistenciasScreenState
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(child: CircularProgressIndicator(color: primaryBlue));
           }
 
           final registros = snapshot.data ?? [];
 
           if (registros.isEmpty) {
             return RefreshIndicator(
-              onRefresh: _recargar,
+              onRefresh: () async => _recargar(),
               child: ListView(
                 children: const [
                   SizedBox(height: 180),
@@ -78,7 +122,7 @@ class _HistorialAsistenciasScreenState
           }
 
           return RefreshIndicator(
-            onRefresh: _recargar,
+            onRefresh: () async => _recargar(),
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: registros.length,
@@ -124,6 +168,8 @@ class _HistorialAsistenciasScreenState
                           ),
                         ),
                         const SizedBox(height: 12),
+                        // 🟠 NOTA: Si presentes/ausentes/retardos te dan error aquí abajo,
+                        // me avisas, porque significa que hay que calcularlos a mano.
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
@@ -157,11 +203,7 @@ class _HistorialAsistenciasScreenState
                               ),
                             ),
                             SizedBox(width: 4),
-                            Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 14,
-                              color: Color(0xFF2D63ED),
-                            ),
+                            Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF2D63ED)),
                           ],
                         ),
                       ],
@@ -181,25 +223,14 @@ class _MiniChip extends StatelessWidget {
   final String label;
   final Color bg;
   final Color fg;
-
   const _MiniChip({required this.label, required this.bg, required this.fg});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: fg,
-          fontWeight: FontWeight.w900,
-          fontSize: 12.5,
-        ),
-      ),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
+      child: Text(label, style: TextStyle(color: fg, fontWeight: FontWeight.w900, fontSize: 12.5)),
     );
   }
 }

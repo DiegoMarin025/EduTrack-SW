@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <--- Nuevo
+import 'package:cloud_firestore/cloud_firestore.dart'; // <--- Nuevo
 
 import 'login_page.dart';
 import 'main_layout.dart';
 import 'pantallasmaestros/main_layout_maestros_screen.dart';
-import 'services/api_service.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -37,6 +38,7 @@ class _RegisterPageState extends State<RegisterPage> {
     super.dispose();
   }
 
+  // --- LÓGICA DE FIREBASE (SIN TOCAR EL FRONT) ---
   Future<void> register() async {
     if (nameController.text.isEmpty ||
         emailController.text.isEmpty ||
@@ -64,72 +66,56 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => _isLoading = true);
 
     try {
-      await ApiService.registerUser(
-        nameController.text.trim(),
-        emailController.text.trim(),
-        passwordController.text.trim(),
-        userType,
-        matriculaHijo: userType == "Tutor"
-            ? _matriculaHijoController.text.trim()
-            : null,
+      // 1. Crear usuario en Firebase Authentication
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
+        email: emailController.text.trim(),
+        password: passwordController.text.trim(),
       );
 
-      final usuario = await ApiService.loginUser(
-        emailController.text.trim(),
-        passwordController.text.trim(),
-      );
+      String uid = userCredential.user!.uid;
 
+      // 2. Guardar datos adicionales en Cloud Firestore (La "tabla")
+      await FirebaseFirestore.instance.collection('usuarios').doc(uid).set({
+        'uid': uid,
+        'nombre': nameController.text.trim(),
+        'email': emailController.text.trim(),
+        'rol': userType,
+        'matriculaHijo': userType == "Tutor" ? _matriculaHijoController.text.trim() : null,
+        'fecha_registro': FieldValue.serverTimestamp(),
+      });
+
+      // 3. Guardar en SharedPreferences para mantener la compatibilidad con tu App
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('saved_username', emailController.text.trim());
       await prefs.setString('saved_password', passwordController.text.trim());
-      await prefs.setString(
-        'saved_userType',
-        (usuario['rol'] ?? userType).toString().toLowerCase(),
-      );
-      await prefs.setString('saved_name', usuario['nombre']);
+      await prefs.setString('saved_userType', userType.toLowerCase());
+      await prefs.setString('saved_name', nameController.text.trim());
+      
+      // Usamos el hash del UID para el ID entero que pide tu app
+      int userIdInt = uid.hashCode; 
+      await prefs.setInt('saved_id', userIdInt);
 
-      final int userId = int.tryParse(usuario['id'].toString()) ?? 0;
-      await prefs.setInt('saved_id', userId);
-
-      int? linkedStudentId = int.tryParse(
-        (usuario['alumno_id_vinculado'] ?? '').toString(),
-      );
-      final rolReal = (usuario['rol'] ?? userType).toString().toLowerCase();
-      if (rolReal == 'tutor' && (linkedStudentId == null || linkedStudentId <= 0)) {
-        final linked = await ApiService.getTutorAlumnoVinculado(userId);
-        linkedStudentId = linked?.id;
-      }
-      if (linkedStudentId != null && linkedStudentId > 0) {
-        await prefs.setInt('saved_linked_student_id', linkedStudentId);
-      } else {
-        await prefs.remove('saved_linked_student_id');
-      }
-
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Bienvenido ${usuario['nombre']}"),
+          content: Text("Bienvenido ${nameController.text.trim()}"),
           backgroundColor: Colors.green,
         ),
       );
 
-      _navegarAlHome(userId);
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      _navegarAlHome(userIdInt);
 
-      _showSnackBar(
-        e.toString().replaceAll('Exception: ', ''),
-        backgroundColor: Colors.red,
-      );
+    } on FirebaseAuthException catch (e) {
+      String msg = "Error al registrar";
+      if (e.code == 'email-already-in-use') msg = "El correo ya está registrado";
+      if (e.code == 'weak-password') msg = "La contraseña es muy débil";
+      _showSnackBar(msg, backgroundColor: Colors.red);
+    } catch (e) {
+      _showSnackBar("Ocurrió un error: ${e.toString()}", backgroundColor: Colors.red);
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -163,6 +149,7 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
+  // --- TU DISEÑO ORIGINAL (INTACTO) ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -223,9 +210,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     DropdownMenuItem(value: "Maestro", child: Text("Maestro")),
                   ],
                   onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
+                    if (value == null) return;
                     setState(() => userType = value);
                   },
                   decoration: _decoration(

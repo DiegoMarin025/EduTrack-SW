@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../services/api_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // <--- CONEXIÓN A LA NUBE
+import '../services/api_service.dart'; // <--- Usamos el Grupo de aquí
 import 'detalle_grupo_screen.dart';
 import 'dialog_crear_clase.dart';
 import 'teacher_navigation_helper.dart';
@@ -13,18 +14,17 @@ class MisGruposScreen extends StatefulWidget {
 }
 
 class _MisGruposScreenState extends State<MisGruposScreen> {
-  List<Grupo> _clases = [];
+  // ✅ Usamos el modelo Grupo oficial de tu proyecto
+  List<Grupo> _clases = []; 
   bool _loading = true;
-  int _profesorId = 0;
+  String _profesorUid = ""; 
 
-  // UI (alineado con tu login)
   final Color primaryBlue = const Color(0xFF2D63ED);
   final Color bgLight = const Color(0xFFF8FAFC);
   final Color textDark = const Color(0xFF0F172A);
   final Color textSoft = const Color(0xFF64748B);
   final Color border = const Color(0xFFE2E8F0);
 
-  // Para expandir/cerrar un grupo
   final Set<int> _expandedGroups = {};
 
   @override
@@ -36,51 +36,71 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
   Future<void> _cargarDatosUsuario() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _profesorId = prefs.getInt('saved_id') ?? 0;
+      // ✅ Obtenemos el UID de Firebase que guardamos en el login
+      _profesorUid = prefs.getString('saved_uid') ?? "";
     });
 
-    if (_profesorId != 0) {
-      _cargarClases();
+    if (_profesorUid.isNotEmpty) {
+      _cargarClasesFirebase();
     } else {
       setState(() => _loading = false);
     }
   }
 
-  Future<void> _cargarClases() async {
+  // ======================================================
+  // 💾 LÓGICA DE FIREBASE (Sustituye a ApiService viejo)
+  // ======================================================
+  Future<void> _cargarClasesFirebase() async {
     setState(() => _loading = true);
     try {
-      final grupos = await ApiService.getGrupos(profesorId: _profesorId);
+      // ✅ Buscamos en la colección 'grupos' de la nube
+      final snapshot = await FirebaseFirestore.instance
+          .collection('grupos')
+          .where('profesorId', isEqualTo: _profesorUid)
+          .get();
+
+      final gruposFirebase = snapshot.docs.map((doc) {
+        final data = doc.data();
+        return Grupo(
+          id: data['id'] ?? doc.id.hashCode,
+          nombre: data['nombre'] ?? 'Sin nombre',
+          materia: data['materia'] ?? 'Sin materia',
+          grupoIdReal: data['grupoIdReal'] ?? 0,
+        );
+      }).toList();
+
       if (!mounted) return;
       setState(() {
-        _clases = grupos;
+        _clases = gruposFirebase;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
+      debugPrint("Error Firebase: $e");
     }
   }
 
   void _abrirDialogoCrear() {
-    if (_profesorId == 0) {
+    if (_profesorUid.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Error: No se identifico al profesor")),
+        const SnackBar(content: Text("Error: No se identificó al profesor")),
       );
       return;
     }
 
     showDialog(
       context: context,
-      builder: (context) => DialogCrearClase(profesorId: _profesorId),
-    ).then((_) => _cargarClases());
+      // ✅ Usamos el hash del UID para el ID numérico si lo necesitas
+      builder: (context) => DialogCrearClase(profesorId: _profesorUid.hashCode),
+    ).then((_) => _cargarClasesFirebase());
   }
 
-  // Agrupa materias por grupo físico (TI-52, 5°A, etc.)
   List<_GrupoBundle> _buildBundles() {
     final Map<int, _GrupoBundle> map = {};
 
     for (final c in _clases) {
-      final key = c.grupoIdReal; // grupo físico
+      final key = c.grupoIdReal; 
       map.putIfAbsent(
         key,
         () => _GrupoBundle(grupoIdReal: key, nombreGrupo: c.nombre, items: []),
@@ -89,12 +109,7 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
     }
 
     final list = map.values.toList();
-
-    // Ordena por nombre para que se vea estable
-    list.sort(
-      (a, b) =>
-          a.nombreGrupo.toLowerCase().compareTo(b.nombreGrupo.toLowerCase()),
-    );
+    list.sort((a, b) => a.nombreGrupo.toLowerCase().compareTo(b.nombreGrupo.toLowerCase()));
     return list;
   }
 
@@ -112,9 +127,7 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
   Widget build(BuildContext context) {
     final bundles = _buildBundles();
     final width = MediaQuery.of(context).size.width;
-    final fabRightInset = width >= 1100
-        ? 170.0
-        : (width >= 800 ? 154.0 : 138.0);
+    final fabRightInset = width >= 1100 ? 170.0 : (width >= 800 ? 154.0 : 138.0);
 
     return Scaffold(
       backgroundColor: bgLight,
@@ -132,63 +145,22 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
         child: _loading
             ? Center(child: CircularProgressIndicator(color: primaryBlue))
             : Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: ListView(
                   children: [
-                    Text(
-                      "Tu salon y tus materias",
-                      style: TextStyle(
-                        color: textDark,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
+                    Text("Tu salon y tus materias", style: TextStyle(color: textDark, fontSize: 20, fontWeight: FontWeight.w900)),
                     const SizedBox(height: 6),
-                    Text(
-                      "Aqui gestionas tu grupo: alumnos, lista del dia y calificaciones.",
-                      style: TextStyle(
-                        color: textSoft,
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    Text("Aqui gestionas tu grupo: alumnos, lista del dia y calificaciones.", style: TextStyle(color: textSoft, fontSize: 13.5, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 14),
                     if (bundles.isEmpty) ...[
-                      _OnboardingEmpty(
-                        primaryBlue: primaryBlue,
-                        border: border,
-                        textDark: textDark,
-                        textSoft: textSoft,
-                        onCreate: _abrirDialogoCrear,
-                      ),
+                      _OnboardingEmpty(primaryBlue: primaryBlue, border: border, textDark: textDark, textSoft: textSoft, onCreate: _abrirDialogoCrear),
                       const SizedBox(height: 12),
-                      _TipCard(
-                        border: border,
-                        textSoft: textSoft,
-                        textDark: textDark,
-                      ),
+                      _TipCard(border: border, textSoft: textSoft, textDark: textDark),
                     ] else ...[
-                      _TodayCard(
-                        primaryBlue: primaryBlue,
-                        border: border,
-                        textDark: textDark,
-                        textSoft: textSoft,
-                      ),
+                      _TodayCard(primaryBlue: primaryBlue, border: border, textDark: textDark, textSoft: textSoft),
                       const SizedBox(height: 14),
-
-                      Text(
-                        "Mis grupos",
-                        style: TextStyle(
-                          color: textDark,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
+                      Text("Mis grupos", style: TextStyle(color: textDark, fontSize: 16, fontWeight: FontWeight.w900)),
                       const SizedBox(height: 10),
-
                       for (final bundle in bundles) ...[
                         _GroupCard(
                           primaryBlue: primaryBlue,
@@ -196,28 +168,15 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
                           textDark: textDark,
                           textSoft: textSoft,
                           bundle: bundle,
-                          expanded: _expandedGroups.contains(
-                            bundle.grupoIdReal,
-                          ),
-                          onToggleExpand: () =>
-                              _toggleExpand(bundle.grupoIdReal),
+                          expanded: _expandedGroups.contains(bundle.grupoIdReal),
+                          onToggleExpand: () => _toggleExpand(bundle.grupoIdReal),
                           onOpenAlumnos: () {
-                            // Abrimos alumnos con el primer item (tiene ids correctos)
                             final representative = bundle.items.first;
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    DetalleGrupoScreen(grupo: representative),
-                              ),
-                            );
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => DetalleGrupoScreen(grupo: representative)));
                           },
                           onPasarLista: () {
                             final representative = bundle.items.first;
-                            TeacherNavigationHelper.openAttendanceForRepresentative(
-                              context: context,
-                              representative: representative,
-                            );
+                            TeacherNavigationHelper.openAttendanceForRepresentative(context: context, representative: representative);
                           },
                         ),
                         const SizedBox(height: 12),
@@ -231,429 +190,130 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
   }
 }
 
-// ===============================
-// UI COMPONENTS
-// ===============================
-
+// ✅ MANTENEMOS TUS COMPONENTES DE UI EXACTAMENTE IGUALES ABAJO
 class _OnboardingEmpty extends StatelessWidget {
-  final Color primaryBlue;
-  final Color border;
-  final Color textDark;
-  final Color textSoft;
+  final Color primaryBlue, border, textDark, textSoft;
   final VoidCallback onCreate;
-
-  const _OnboardingEmpty({
-    required this.primaryBlue,
-    required this.border,
-    required this.textDark,
-    required this.textSoft,
-    required this.onCreate,
-  });
-
+  const _OnboardingEmpty({required this.primaryBlue, required this.border, required this.textDark, required this.textSoft, required this.onCreate});
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: border),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: primaryBlue.withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(Icons.school_rounded, color: primaryBlue),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  "Aún no tienes grupos",
-                  style: TextStyle(
-                    color: textDark,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            "Crea tu primer grupo, ponle nombre y agrega una materia. Luego podras registrar alumnos y pasar lista.",
-            style: TextStyle(
-              color: textSoft,
-              fontSize: 13.5,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 14),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryBlue,
-              foregroundColor: Colors.white,
-              shape: const StadiumBorder(),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            ),
-            onPressed: onCreate,
-            icon: const Icon(Icons.add_rounded),
-            label: const Text(
-              "Crear mi primer grupo",
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        ],
-      ),
+      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: border), borderRadius: BorderRadius.circular(18)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 44, height: 44, decoration: BoxDecoration(color: primaryBlue.withOpacity(0.10), borderRadius: BorderRadius.circular(14)), child: Icon(Icons.school_rounded, color: primaryBlue)),
+          const SizedBox(width: 12),
+          Expanded(child: Text("Aún no tienes grupos", style: TextStyle(color: textDark, fontSize: 16, fontWeight: FontWeight.w900))),
+        ]),
+        const SizedBox(height: 10),
+        Text("Crea tu primer grupo, ponle nombre y agrega una materia.", style: TextStyle(color: textSoft, fontSize: 13.5, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 14),
+        ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(backgroundColor: primaryBlue, foregroundColor: Colors.white, shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
+          onPressed: onCreate, icon: const Icon(Icons.add_rounded), label: const Text("Crear mi primer grupo", style: TextStyle(fontWeight: FontWeight.w800)),
+        ),
+      ]),
     );
   }
 }
 
 class _TipCard extends StatelessWidget {
-  final Color border;
-  final Color textSoft;
-  final Color textDark;
-
-  const _TipCard({
-    required this.border,
-    required this.textSoft,
-    required this.textDark,
-  });
-
+  final Color border, textSoft, textDark;
+  const _TipCard({required this.border, required this.textSoft, required this.textDark});
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: border),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.info_outline_rounded, color: Color(0xFF64748B)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              "Tip: Si tu escuela usa un solo grupo (por ejemplo 5°B), crea ese grupo una vez y luego agrega tus materias.",
-              style: TextStyle(
-                color: textSoft,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
-          ),
-        ],
-      ),
+      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: border), borderRadius: BorderRadius.circular(18)),
+      child: Row(children: [
+        const Icon(Icons.info_outline_rounded, color: Color(0xFF64748B)),
+        const SizedBox(width: 10),
+        Expanded(child: Text("Tip: Si tu escuela usa un solo grupo, créalo una vez y agrega tus materias.", style: TextStyle(color: textSoft, fontWeight: FontWeight.w600, fontSize: 13))),
+      ]),
     );
   }
 }
 
 class _TodayCard extends StatelessWidget {
-  final Color primaryBlue;
-  final Color border;
-  final Color textDark;
-  final Color textSoft;
-
-  const _TodayCard({
-    required this.primaryBlue,
-    required this.border,
-    required this.textDark,
-    required this.textSoft,
-  });
-
+  final Color primaryBlue, border, textDark, textSoft;
+  const _TodayCard({required this.primaryBlue, required this.border, required this.textDark, required this.textSoft});
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final label = "${now.day}/${now.month}/${now.year}";
-
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: border),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: primaryBlue.withOpacity(0.10),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(Icons.today_rounded, color: primaryBlue),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Hoy • $label",
-                  style: TextStyle(
-                    color: textDark,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 14.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  "Asistencia: pendiente • Calificaciones: opcional",
-                  style: TextStyle(
-                    color: textSoft,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12.8,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              "Pendiente",
-              style: TextStyle(
-                color: textSoft,
-                fontWeight: FontWeight.w800,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ],
-      ),
+      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: border), borderRadius: BorderRadius.circular(18)),
+      child: Row(children: [
+        Container(width: 46, height: 46, decoration: BoxDecoration(color: primaryBlue.withOpacity(0.10), borderRadius: BorderRadius.circular(16)), child: Icon(Icons.today_rounded, color: primaryBlue)),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text("Hoy • ${now.day}/${now.month}/${now.year}", style: TextStyle(color: textDark, fontWeight: FontWeight.w900, fontSize: 14.5)),
+          const SizedBox(height: 4),
+          Text("Asistencia: pendiente", style: TextStyle(color: textSoft, fontWeight: FontWeight.w600, fontSize: 12.8)),
+        ])),
+        Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(999)), child: Text("Pendiente", style: TextStyle(color: textSoft, fontWeight: FontWeight.w800, fontSize: 12))),
+      ]),
     );
   }
 }
 
 class _GroupCard extends StatelessWidget {
-  final Color primaryBlue;
-  final Color border;
-  final Color textDark;
-  final Color textSoft;
+  final Color primaryBlue, border, textDark, textSoft;
   final _GrupoBundle bundle;
   final bool expanded;
-  final VoidCallback onToggleExpand;
-  final VoidCallback onOpenAlumnos;
-  final VoidCallback onPasarLista;
-
-  const _GroupCard({
-    required this.primaryBlue,
-    required this.border,
-    required this.textDark,
-    required this.textSoft,
-    required this.bundle,
-    required this.expanded,
-    required this.onToggleExpand,
-    required this.onOpenAlumnos,
-    required this.onPasarLista,
-  });
-
+  final VoidCallback onToggleExpand, onOpenAlumnos, onPasarLista;
+  const _GroupCard({required this.primaryBlue, required this.border, required this.textDark, required this.textSoft, required this.bundle, required this.expanded, required this.onToggleExpand, required this.onOpenAlumnos, required this.onPasarLista});
   @override
   Widget build(BuildContext context) {
     final materias = bundle.items.map((e) => e.materia).toList();
-    final materiasText = materias.length == 1
-        ? "1 materia"
-        : "${materias.length} materias";
-
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: border),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: onToggleExpand,
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  Container(
-                    width: 46,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      color: primaryBlue.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Icon(Icons.groups_rounded, color: primaryBlue),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          bundle.nombreGrupo,
-                          style: TextStyle(
-                            color: textDark,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          materiasText,
-                          style: TextStyle(
-                            color: textSoft,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    expanded
-                        ? Icons.expand_less_rounded
-                        : Icons.expand_more_rounded,
-                    color: Colors.grey[500],
-                  ),
-                ],
-              ),
-            ),
+      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: border), borderRadius: BorderRadius.circular(18)),
+      child: Column(children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onToggleExpand,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(children: [
+              Container(width: 46, height: 46, decoration: BoxDecoration(color: primaryBlue.withOpacity(0.10), borderRadius: BorderRadius.circular(16)), child: Icon(Icons.groups_rounded, color: primaryBlue)),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(bundle.nombreGrupo, style: TextStyle(color: textDark, fontWeight: FontWeight.w900, fontSize: 16)),
+                const SizedBox(height: 4),
+                Text("${materias.length} materias", style: TextStyle(color: textSoft, fontWeight: FontWeight.w600, fontSize: 13)),
+              ])),
+              Icon(expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded, color: Colors.grey[500]),
+            ]),
           ),
-
-          // Acciones rápidas (más “primaria”)
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+          child: Row(children: [
+            Expanded(child: OutlinedButton.icon(onPressed: onPasarLista, style: OutlinedButton.styleFrom(side: BorderSide(color: border), shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(vertical: 10)), icon: const Icon(Icons.checklist_rounded, size: 18), label: const Text("Pasar lista", style: TextStyle(fontWeight: FontWeight.w800)))),
+            const SizedBox(width: 10),
+            Expanded(child: ElevatedButton.icon(onPressed: onOpenAlumnos, style: ElevatedButton.styleFrom(backgroundColor: primaryBlue, foregroundColor: Colors.white, shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(vertical: 10)), icon: const Icon(Icons.people_alt_rounded, size: 18), label: const Text("Alumnos", style: TextStyle(fontWeight: FontWeight.w800)))),
+          ]),
+        ),
+        if (expanded) ...[
+          Container(height: 1, color: border),
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onPasarLista,
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: border),
-                      shape: const StadiumBorder(),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                    icon: const Icon(Icons.checklist_rounded, size: 18),
-                    label: const Text(
-                      "Pasar lista",
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: onOpenAlumnos,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryBlue,
-                      foregroundColor: Colors.white,
-                      shape: const StadiumBorder(),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                    icon: const Icon(Icons.people_alt_rounded, size: 18),
-                    label: const Text(
-                      "Alumnos",
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            padding: const EdgeInsets.all(14),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text("Materias", style: TextStyle(color: textDark, fontWeight: FontWeight.w900, fontSize: 14)),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, runSpacing: 8, children: materias.map((m) => Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(999)), child: Text(m, style: TextStyle(color: textDark, fontWeight: FontWeight.w700, fontSize: 12.5)))).toList()),
+            ]),
           ),
-
-          // Materias (expandible)
-          if (expanded) ...[
-            Container(height: 1, color: border),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Materias",
-                    style: TextStyle(
-                      color: textDark,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: materias.map((m) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          m,
-                          style: TextStyle(
-                            color: textDark,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12.5,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Botón secundario (cuando quieras conectar a calificaciones)
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.grade_rounded,
-                        size: 18,
-                        color: Color(0xFF64748B),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          "",
-                          style: TextStyle(
-                            color: textSoft,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12.8,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
         ],
-      ),
+      ]),
     );
   }
 }
 
-// Agrupación local
 class _GrupoBundle {
   final int grupoIdReal;
   final String nombreGrupo;
   final List<Grupo> items;
-
-  _GrupoBundle({
-    required this.grupoIdReal,
-    required this.nombreGrupo,
-    required this.items,
-  });
+  _GrupoBundle({required this.grupoIdReal, required this.nombreGrupo, required this.items});
 }

@@ -1,32 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/api_service.dart';
-import 'pasar_lista_screen.dart';
+// Borra el "as screen" y pon el "hide" que es más fácil:
+import 'pasar_lista_screen.dart' hide Grupo, Alumno;
 
 class TeacherNavigationHelper {
   static Future<void> openQuickAttendance({
     required BuildContext context,
-    required int profesorId,
+    required dynamic profesorId,
   }) async {
-    if (profesorId == 0) {
+    if (profesorId == 0 || profesorId == "") {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No se encontro el profesor.")),
+        const SnackBar(content: Text("No se encontró el profesor.")),
       );
       return;
     }
 
     try {
-      final clases = await ApiService.getGrupos(profesorId: profesorId);
+      final snapshot = await FirebaseFirestore.instance
+          .collection('grupos')
+          .where('profesorId', isEqualTo: profesorId.toString())
+          .get();
+
+      final clases = snapshot.docs.map((doc) {
+        final data = doc.data();
+        return Grupo(
+          id: data['id'] ?? doc.id.hashCode,
+          nombre: data['nombre'] ?? 'Sin nombre',
+          materia: data['materia'] ?? 'Sin materia',
+          grupoIdReal: data['grupoIdReal'] ?? 0,
+        );
+      }).toList();
 
       if (!context.mounted) return;
-
       if (clases.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              "Aun no tienes grupos o materias. Ve a Mis Grupos y crea tu primer grupo.",
-            ),
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Aún no tienes grupos.")));
         return;
       }
 
@@ -37,8 +47,7 @@ class TeacherNavigationHelper {
       }
 
       if (porGrupoReal.length == 1) {
-        final representative = porGrupoReal.values.first.first;
-        await _openAttendanceForGroup(context, representative);
+        await _openAttendanceForGroup(context, porGrupoReal.values.first.first);
         return;
       }
 
@@ -49,7 +58,6 @@ class TeacherNavigationHelper {
         ),
         builder: (sheetContext) {
           final items = porGrupoReal.values.toList();
-
           return SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -66,7 +74,7 @@ class TeacherNavigationHelper {
                   ),
                   const SizedBox(height: 14),
                   const Text(
-                    "A que grupo vas a pasar lista?",
+                    "¿A qué grupo vas a pasar lista?",
                     style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
                   ),
                   const SizedBox(height: 12),
@@ -76,23 +84,18 @@ class TeacherNavigationHelper {
                       itemCount: items.length,
                       itemBuilder: (context, index) {
                         final bundle = items[index];
-                        final representative = bundle.first;
-                        final materiasCount = bundle.length;
-
+                        final rep = bundle.first;
                         return ListTile(
                           leading: const Icon(Icons.groups_rounded),
                           title: Text(
-                            representative.nombre,
+                            rep.nombre,
                             style: const TextStyle(fontWeight: FontWeight.w900),
                           ),
-                          subtitle: Text("$materiasCount materias"),
+                          subtitle: Text("${bundle.length} materias"),
                           trailing: const Icon(Icons.chevron_right_rounded),
                           onTap: () async {
                             Navigator.pop(sheetContext);
-                            await _openAttendanceForGroup(
-                              context,
-                              representative,
-                            );
+                            await _openAttendanceForGroup(context, rep);
                           },
                         );
                       },
@@ -104,14 +107,11 @@ class TeacherNavigationHelper {
           );
         },
       );
-    } catch (error) {
+    } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Error al abrir pasar lista: $error"),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 
@@ -119,33 +119,44 @@ class TeacherNavigationHelper {
     required BuildContext context,
     required Grupo representative,
   }) async {
-    try {
-      await _openAttendanceForGroup(context, representative);
-    } catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Error al abrir pasar lista: $error"),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+    await _openAttendanceForGroup(context, representative);
   }
 
   static Future<void> _openAttendanceForGroup(
     BuildContext context,
     Grupo representative,
   ) async {
-    final alumnos = await ApiService.getAlumnosRegistrados(representative);
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('alumnos')
+          .where('grupoId', isEqualTo: representative.grupoIdReal)
+          .get();
 
-    if (!context.mounted) return;
+      final alumnos = snapshot.docs.map((doc) {
+        final data = doc.data();
+        return Alumno(
+          id: data['id'] ?? doc.id.hashCode,
+          nombre: data['nombre'] ?? 'Sin nombre',
+          correo: data['correo'] ?? '',
+        );
+      }).toList();
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            PasarListaScreen(grupo: representative, alumnos: alumnos),
-      ),
-    );
+      if (!context.mounted) return;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PasarListaScreen( // <-- Debe quedar el nombre normal
+            grupo: representative,
+            alumnos: alumnos,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+    }
   }
 }

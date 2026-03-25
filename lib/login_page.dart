@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <--- Importante
+import 'package:cloud_firestore/cloud_firestore.dart'; // <--- Importante
 
 import 'main_layout.dart';
 import 'pantallasmaestros/main_layout_maestros_screen.dart';
 import 'register_page.dart';
-import 'services/api_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -29,22 +30,18 @@ class _LoginPageState extends State<LoginPage>
   @override
   void initState() {
     super.initState();
-
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-
     _fadeAnimation = CurvedAnimation(
       parent: _controller,
       curve: Curves.easeInOut,
     );
-
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.1),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-
     _controller.forward();
   }
 
@@ -56,6 +53,9 @@ class _LoginPageState extends State<LoginPage>
     super.dispose();
   }
 
+  // ======================================================
+  // 🔐 LÓGICA DE LOGIN CON FIREBASE (Sustituye a ApiService)
+  // ======================================================
   void login() async {
     if (emailController.text.isEmpty || passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -67,46 +67,62 @@ class _LoginPageState extends State<LoginPage>
     setState(() => _isLoading = true);
 
     try {
-      final usuario = await ApiService.loginUser(
-        emailController.text.trim(),
-        passwordController.text.trim(),
+      // 1. Iniciar sesión en Firebase Auth
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+        email: emailController.text.trim(),
+        password: passwordController.text.trim(),
       );
 
-      final String rolReal = (usuario['rol'] ?? 'alumno')
-          .toString()
-          .toLowerCase();
+      String uid = userCredential.user!.uid;
 
+      // 2. Traer los datos del usuario desde Firestore
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(uid)
+          .get();
+
+      if (!userDoc.exists) {
+        throw "No se encontró información del usuario en la base de datos.";
+      }
+
+      final userData = userDoc.data() as Map<String, dynamic>;
+      final String rolReal = (userData['rol'] ?? 'tutor').toString().toLowerCase();
+      final String nombreFull = userData['nombre'] ?? 'Usuario';
+
+      // 3. Guardar en SharedPreferences para que la App no se rompa
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('saved_username', emailController.text.trim());
-      await prefs.setString('saved_password', passwordController.text.trim());
+      await prefs.setString('saved_name', nombreFull);
       await prefs.setString('saved_userType', rolReal);
+      await prefs.setString('saved_uid', uid);
+      
+      // Mantenemos saved_id como un int (usando el hash del uid) para compatibilidad
+      int userIdInt = uid.hashCode;
+      await prefs.setInt('saved_id', userIdInt);
 
-      final int userId = usuario['id'];
-      await prefs.setInt('saved_id', userId);
-      await prefs.setString('saved_name', usuario['nombre']);
-      int? linkedStudentId = int.tryParse(
-        (usuario['alumno_id_vinculado'] ?? '').toString(),
-      );
-      if (rolReal == 'tutor' && (linkedStudentId == null || linkedStudentId <= 0)) {
-        final linked = await ApiService.getTutorAlumnoVinculado(userId);
-        linkedStudentId = linked?.id;
-      }
-      if (linkedStudentId != null && linkedStudentId > 0) {
-        await prefs.setInt('saved_linked_student_id', linkedStudentId);
-      } else {
-        await prefs.remove('saved_linked_student_id');
+      // Manejo de matrícula vinculada (si es tutor)
+      if (userData.containsKey('matriculaHijo')) {
+        await prefs.setString('saved_linked_student_id', userData['matriculaHijo'].toString());
       }
 
       if (mounted) {
-        _navegarAlHome(usuario, rolReal);
+        _navegarAlHome(userData, rolReal);
+      }
+    } on FirebaseAuthException catch (e) {
+      String mensaje = "Error al ingresar";
+      if (e.code == 'user-not-found') mensaje = "El correo no está registrado";
+      else if (e.code == 'wrong-password') mensaje = "Contraseña incorrecta";
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(mensaje), backgroundColor: Colors.red),
+        );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -117,7 +133,7 @@ class _LoginPageState extends State<LoginPage>
   void _navegarAlHome(Map<String, dynamic> usuario, String rol) {
     final rawName = usuario['nombre'] ?? 'Usuario';
     final displayName = rawName.toString().split(' ')[0];
-    final int userId = usuario['id'];
+    final String uid = usuario['uid'] ?? "";
 
     if (rol == 'profesor' || rol == 'maestro') {
       Navigator.pushReplacement(
@@ -129,12 +145,15 @@ class _LoginPageState extends State<LoginPage>
         context,
         MaterialPageRoute(
           builder: (context) =>
-              MainLayout(username: displayName, usuarioId: userId),
+              MainLayout(username: displayName, usuarioId: uid.hashCode),
         ),
       );
     }
   }
 
+  // ======================================================
+  // 🎨 DISEÑO ORIGINAL (SIN TOCAR NADA)
+  // ======================================================
   @override
   Widget build(BuildContext context) {
     final isWeb = MediaQuery.of(context).size.width > 800;
@@ -193,7 +212,6 @@ class _LoginPageState extends State<LoginPage>
                     style: TextStyle(fontSize: 20, color: Colors.white70),
                   ),
                   const SizedBox(height: 50),
-
                   Center(
                     child: Image.asset(
                       'lib/image/login.png',
@@ -206,60 +224,11 @@ class _LoginPageState extends State<LoginPage>
             ),
           ),
         ),
-
-        /// LADO DERECHO
         Expanded(
           flex: 4,
           child: Center(child: SizedBox(width: 420, child: _buildLoginCard())),
         ),
       ],
-    );
-  }
-
-  Widget _buildAmbientBlob({required double size, required Color color}) {
-    return IgnorePointer(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(color: color, blurRadius: size * 0.55, spreadRadius: 12),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeroIllustration() {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440),
-        child: Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.white.withOpacity(0.12)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.18),
-                blurRadius: 26,
-                offset: const Offset(0, 18),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: AspectRatio(
-              aspectRatio: 1.12,
-              child: Image.asset('lib/image/login.png', fit: BoxFit.cover),
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -283,7 +252,7 @@ class _LoginPageState extends State<LoginPage>
           Image.asset('lib/image/logotipo.png', height: 200),
           const SizedBox(height: 25),
           const Text(
-            'Iniciar Sesi\u00f3n',
+            'Iniciar Sesión',
             style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.bold,
@@ -293,13 +262,13 @@ class _LoginPageState extends State<LoginPage>
           const SizedBox(height: 30),
           _modernTextField(
             controller: emailController,
-            hint: 'Correo electr\u00f3nico',
+            hint: 'Correo electrónico',
             icon: Icons.email_outlined,
           ),
           const SizedBox(height: 20),
           _modernTextField(
             controller: passwordController,
-            hint: 'Contrase\u00f1a',
+            hint: 'Contraseña',
             icon: Icons.lock_outline,
             isPassword: true,
           ),
@@ -310,11 +279,11 @@ class _LoginPageState extends State<LoginPage>
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => RegisterPage()),
+                MaterialPageRoute(builder: (context) => const RegisterPage()),
               );
             },
             child: const Text(
-              '\u00bfNo tienes cuenta? Reg\u00edstrate',
+              '¿No tienes cuenta? Regístrate',
               style: TextStyle(color: Color(0xFF1E3A8A)),
             ),
           ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart'; // <--- MAGIA DE FIREBASE
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 
 enum _ModoGrupo { existente, nuevo }
@@ -21,11 +22,18 @@ class _DialogCrearClaseState extends State<DialogCrearClase> {
   final TextEditingController _materiaController = TextEditingController();
   bool _loadingCatalogo = true;
   bool _loadingAction = false;
+  String _profesorUid = "";
 
   @override
   void initState() {
     super.initState();
-    _cargarCatalogo();
+    _cargarDatosYCatalogo();
+  }
+
+  Future<void> _cargarDatosYCatalogo() async {
+    final prefs = await SharedPreferences.getInstance();
+    _profesorUid = prefs.getString('saved_uid') ?? "";
+    await _cargarCatalogoFirebase();
   }
 
   @override
@@ -38,9 +46,28 @@ class _DialogCrearClaseState extends State<DialogCrearClase> {
   bool get _usaGrupoExistente =>
       _modoGrupo == _ModoGrupo.existente && _gruposDisponibles.isNotEmpty;
 
-  Future<void> _cargarCatalogo() async {
+  // ======================================================
+  // 💾 BUSCAMOS LOS GRUPOS EN FIREBASE (No más ApiService)
+  // ======================================================
+  Future<void> _cargarCatalogoFirebase() async {
     try {
-      final res = await ApiService.getGruposFisicos();
+      final snapshot = await FirebaseFirestore.instance
+          .collection('grupos')
+          .where('profesorId', isEqualTo: _profesorUid)
+          .get();
+
+      final res = snapshot.docs.map((doc) {
+        final data = doc.data();
+        return GrupoFisico(
+          id: data['grupoIdReal'] ?? 0,
+          nombre: data['nombre'] ?? '',
+        );
+      }).toList();
+
+      // Quitar duplicados por nombre
+      final ids = <String>{};
+      res.retainWhere((x) => ids.add(x.nombre));
+
       if (!mounted) return;
 
       setState(() {
@@ -48,7 +75,7 @@ class _DialogCrearClaseState extends State<DialogCrearClase> {
         _loadingCatalogo = false;
         if (res.isNotEmpty) {
           _modoGrupo = _ModoGrupo.existente;
-          _selectedGrupoId ??= res.first.id;
+          _selectedGrupoId = res.first.id;
         } else {
           _modoGrupo = _ModoGrupo.nuevo;
           _selectedGrupoId = null;
@@ -71,6 +98,9 @@ class _DialogCrearClaseState extends State<DialogCrearClase> {
     );
   }
 
+  // ======================================================
+  // 💾 GUARDAMOS EL GRUPO EN FIREBASE (No más ApiService)
+  // ======================================================
   Future<void> _crear() async {
     final materia = _materiaController.text.trim();
     final nombreGrupo = _grupoController.text.trim();
@@ -92,12 +122,23 @@ class _DialogCrearClaseState extends State<DialogCrearClase> {
 
     setState(() => _loadingAction = true);
     try {
-      await ApiService.crearClase(
-        grupoId: _usaGrupoExistente ? _selectedGrupoId : null,
-        nombreGrupo: _usaGrupoExistente ? null : nombreGrupo,
-        nombreMateria: materia,
-        profesorId: widget.profesorId,
-      );
+      // Si es nuevo, le damos un ID numérico basado en el reloj
+      final idReal = _usaGrupoExistente 
+          ? _selectedGrupoId 
+          : DateTime.now().millisecondsSinceEpoch; 
+
+      final nombreFinal = _usaGrupoExistente 
+          ? _gruposDisponibles.firstWhere((g) => g.id == _selectedGrupoId).nombre
+          : nombreGrupo;
+
+      // MAGIA: Esto crea la colección 'grupos' automáticamente en la consola
+      await FirebaseFirestore.instance.collection('grupos').add({
+        'nombre': nombreFinal,
+        'materia': materia,
+        'profesorId': _profesorUid,
+        'grupoIdReal': idReal,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
 
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -134,36 +175,30 @@ class _DialogCrearClaseState extends State<DialogCrearClase> {
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 8),
-                RadioGroup<_ModoGrupo>(
+                RadioListTile<_ModoGrupo>(
+                  contentPadding: EdgeInsets.zero,
+                  value: _ModoGrupo.existente,
                   groupValue: _modoGrupo,
+                  title: const Text('Usar un grupo existente'),
+                  subtitle: const Text('Agrega otra materia a un grupo ya creado'),
                   onChanged: (value) {
-                    if (_loadingAction || value == null) return;
-                    setState(() => _modoGrupo = value);
+                    if (!_loadingAction && value != null) {
+                      setState(() => _modoGrupo = value);
+                    }
                   },
-                  child: Column(
-                    children: [
-                      RadioListTile<_ModoGrupo>(
-                        contentPadding: EdgeInsets.zero,
-                        value: _ModoGrupo.existente,
-                        enabled: !_loadingAction,
-                        title: const Text('Usar un grupo existente'),
-                        subtitle: const Text(
-                          'Agrega otra materia a un grupo ya creado',
-                        ),
-                      ),
-                      RadioListTile<_ModoGrupo>(
-                        contentPadding: EdgeInsets.zero,
-                        value: _ModoGrupo.nuevo,
-                        enabled: !_loadingAction,
-                        title: const Text('Crear un grupo nuevo'),
-                        subtitle: const Text(
-                          'Ponle nombre y enlazalo desde cero',
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
-                const SizedBox(height: 4),
+                RadioListTile<_ModoGrupo>(
+                  contentPadding: EdgeInsets.zero,
+                  value: _ModoGrupo.nuevo,
+                  groupValue: _modoGrupo,
+                  title: const Text('Crear un grupo nuevo'),
+                  subtitle: const Text('Ponle nombre y enlazalo desde cero'),
+                  onChanged: (value) {
+                    if (!_loadingAction && value != null) {
+                      setState(() => _modoGrupo = value);
+                    }
+                  },
+                ),
               ] else ...[
                 Container(
                   width: double.infinity,
@@ -181,8 +216,11 @@ class _DialogCrearClaseState extends State<DialogCrearClase> {
               ],
               if (_usaGrupoExistente) ...[
                 DropdownButtonFormField<int>(
-                  initialValue: _selectedGrupoId,
-                  hint: const Text('Selecciona el grupo'),
+                  value: _selectedGrupoId,
+                  decoration: const InputDecoration(
+                    labelText: 'Selecciona el grupo',
+                    border: OutlineInputBorder(),
+                  ),
                   items: _gruposDisponibles.map((g) {
                     return DropdownMenuItem(value: g.id, child: Text(g.nombre));
                   }).toList(),
