@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // <--- Nuevo
-import 'package:cloud_firestore/cloud_firestore.dart'; // <--- Nuevo
+import 'package:firebase_auth/firebase_auth.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 
 import 'login_page.dart';
 import 'main_layout.dart';
@@ -38,7 +38,7 @@ class _RegisterPageState extends State<RegisterPage> {
     super.dispose();
   }
 
-  // --- LÓGICA DE FIREBASE (SIN TOCAR EL FRONT) ---
+  // --- LÓGICA DE FIREBASE ---
   Future<void> register() async {
     if (nameController.text.isEmpty ||
         emailController.text.isEmpty ||
@@ -49,24 +49,48 @@ class _RegisterPageState extends State<RegisterPage> {
     }
 
     if (passwordController.text != confirmPasswordController.text) {
-      _showSnackBar("Las contraseñas no coinciden");
+      _showSnackBar("Las contraseñas no coinciden", backgroundColor: Colors.red);
       return;
     }
 
     if (passwordController.text.length < 6) {
-      _showSnackBar("La contraseña debe tener al menos 6 caracteres");
+      _showSnackBar("La contraseña debe tener al menos 6 caracteres", backgroundColor: Colors.red);
       return;
     }
 
     if (userType == "Tutor" && _matriculaHijoController.text.trim().isEmpty) {
-      _showSnackBar("Ingresa la matrícula o ID del alumno a vincular");
+      _showSnackBar("Ingresa la matrícula o ID del alumno a vincular", backgroundColor: Colors.red);
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      // 1. Crear usuario en Firebase Authentication
+      int? matriculaNumero;
+
+      // 🔍 1. VERIFICAR QUE EL ALUMNO EXISTA EN FIREBASE ANTES DE REGISTRAR
+      if (userType == "Tutor") {
+        matriculaNumero = int.tryParse(_matriculaHijoController.text.trim());
+
+        if (matriculaNumero == null) {
+          _showSnackBar("La matrícula debe ser solo números", backgroundColor: Colors.red);
+          setState(() => _isLoading = false);
+          return;
+        }
+
+        final alumnoVerificacion = await FirebaseFirestore.instance
+            .collection('alumnos')
+            .where('id', isEqualTo: matriculaNumero)
+            .get();
+
+        if (alumnoVerificacion.docs.isEmpty) {
+          _showSnackBar("No se encontró ningún alumno con esa matrícula", backgroundColor: Colors.red);
+          setState(() => _isLoading = false);
+          return;
+        }
+      }
+
+      // 2. Crear usuario en Firebase Authentication
       UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
         email: emailController.text.trim(),
@@ -75,24 +99,24 @@ class _RegisterPageState extends State<RegisterPage> {
 
       String uid = userCredential.user!.uid;
 
-      // 2. Guardar datos adicionales en Cloud Firestore (La "tabla")
+      // 3. Guardar datos adicionales en Cloud Firestore 
       await FirebaseFirestore.instance.collection('usuarios').doc(uid).set({
         'uid': uid,
         'nombre': nameController.text.trim(),
         'email': emailController.text.trim(),
         'rol': userType,
-        'matriculaHijo': userType == "Tutor" ? _matriculaHijoController.text.trim() : null,
+        'matriculaHijo': matriculaNumero, // Guardado como número int
         'fecha_registro': FieldValue.serverTimestamp(),
       });
 
-      // 3. Guardar en SharedPreferences para mantener la compatibilidad con tu App
+      // 4. Guardar en SharedPreferences para la app
       final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('saved_uid', uid); // 🟢 ESTO FALTABA, ES VITAL PARA EL DASHBOARD
       await prefs.setString('saved_username', emailController.text.trim());
       await prefs.setString('saved_password', passwordController.text.trim());
       await prefs.setString('saved_userType', userType.toLowerCase());
       await prefs.setString('saved_name', nameController.text.trim());
       
-      // Usamos el hash del UID para el ID entero que pide tu app
       int userIdInt = uid.hashCode; 
       await prefs.setInt('saved_id', userIdInt);
 
@@ -149,7 +173,7 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  // --- TU DISEÑO ORIGINAL (INTACTO) ---
+  // --- DISEÑO ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -336,4 +360,4 @@ class _RegisterPageState extends State<RegisterPage> {
       ),
     );
   }
-}
+} 

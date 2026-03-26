@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Importar SharedPreferences
-import '../services/api_service.dart'; // Asegúrate de que la ruta a tu ApiService sea correcta
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 🟢 Conexión a Firebase
 
 class Solution1Soporte extends StatefulWidget {
   final bool needsContact;
@@ -19,56 +19,55 @@ class _Solution1SoporteState extends State<Solution1Soporte> {
   bool _isSending = false;
   int _usuarioId = 0;
   String _userEmail = '';
-  bool get _canSend =>
-      aceptaInfo && detallesController.text.trim().isNotEmpty && !_isSending;
 
   @override
   void initState() {
     super.initState();
-    detallesController.addListener(_onDetallesChanged);
     _cargarDatosUsuario();
-  }
-
-  void _onDetallesChanged() {
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   @override
   void dispose() {
-    detallesController.removeListener(_onDetallesChanged);
     detallesController.dispose();
     super.dispose();
   }
 
-  // Cargamos ID y Correo del usuario logueado (o guardado en caché)
   Future<void> _cargarDatosUsuario() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _usuarioId = prefs.getInt('saved_id') ?? 0;
-      // Si no hay correo guardado, usamos uno genérico o pedimos que lo escriban
-      _userEmail =
-          prefs.getString('saved_username') ?? 'usuario_anonimo@colegio.com';
+      _userEmail = prefs.getString('saved_username') ?? 'usuario_anonimo@colegio.com';
     });
   }
 
-  // Función real para enviar datos al Backend
+  // ☁️ FUNCIÓN REAL HACIA FIREBASE
   Future<void> _enviarReporte() async {
-    setState(() {
-      _isSending = true;
-    });
+    // 🟢 VALIDACIÓN: Revisamos aquí mismo si falta algo antes de enviar
+    if (!aceptaInfo) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('⚠️ Debes marcar la casilla de autorización.'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+    if (detallesController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('⚠️ Por favor, describe el problema en la caja de texto.'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    setState(() => _isSending = true);
 
     try {
-      // Preparamos el mensaje agregando contexto automático
-      final mensajeFinal =
-          "TIPO: Problema de Inicio de Sesión.\nDETALLES: ${detallesController.text}";
-
-      await ApiService.enviarReporteSoporte(
-        _usuarioId,
-        _userEmail,
-        mensajeFinal,
-      );
+      // Guardamos el ticket en la colección de Firebase
+      await FirebaseFirestore.instance.collection('tickets_soporte').add({
+        'usuarioId': _usuarioId,
+        'email': _userEmail,
+        'categoriaProblema': 'No puedo iniciar sesión',
+        'descripcion': detallesController.text.trim(),
+        'status': 'Abierto',
+        'fechaRegistro': FieldValue.serverTimestamp(),
+      });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -77,27 +76,17 @@ class _Solution1SoporteState extends State<Solution1Soporte> {
             backgroundColor: Colors.green,
           ),
         );
-        // Limpiamos el formulario
         detallesController.clear();
-        setState(() {
-          aceptaInfo = false;
-        });
+        setState(() => aceptaInfo = false);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al enviar: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(' Error al enviar: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSending = false;
-        });
-      }
+      if (mounted) setState(() => _isSending = false);
     }
   }
 
@@ -125,7 +114,6 @@ class _Solution1SoporteState extends State<Solution1Soporte> {
             ),
             const SizedBox(height: 12),
 
-            // Botón "Volver a inicio"
             const SizedBox(height: 20),
             const Text('1. Verifica tu conexión a internet'),
             const Text('2. Reinicia la aplicación'),
@@ -211,8 +199,8 @@ class _Solution1SoporteState extends State<Solution1Soporte> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton(
-                          // Solo activa el botón si aceptó el checkbox y escribió algo
-                          onPressed: _canSend ? _enviarReporte : null,
+                          // 🟢 MAGIA AQUÍ: El botón siempre llama a la función, y la función decide qué hacer.
+                          onPressed: _isSending ? null : _enviarReporte,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.deepPurple,
                             foregroundColor: Colors.white,
@@ -266,22 +254,6 @@ class _Solution1SoporteState extends State<Solution1Soporte> {
                         ),
                       ),
                     ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(
-                        Icons.phone_android,
-                        color: Colors.deepPurple,
-                      ),
-                      title: const Text('+52 55 1234 5678'),
-                      subtitle: const Text('Lunes a Viernes, 9am - 6pm'),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.copy),
-                        onPressed: () => _copyToClipboard(
-                          '+52 55 1234 5678',
-                          'Teléfono copiado',
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -297,31 +269,6 @@ class _Solution1SoporteState extends State<Solution1Soporte> {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 1)),
-    );
-  }
-
-  void _showContactDialog(BuildContext context) {
-    // Mantenemos tu método original por si quieres usarlo en lugar de las Cards
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Contacto de Soporte'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text('Correo: soporte@colegio.com'),
-            SizedBox(height: 8),
-            Text('Teléfono: +52 55 1234 5678'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
     );
   }
 }

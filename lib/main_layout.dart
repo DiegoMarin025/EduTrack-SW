@@ -68,14 +68,16 @@ class _MainLayoutState extends State<MainLayout> {
       alumnoId: _linkedStudentId > 0 ? _linkedStudentId : widget.usuarioId,
       onNavigate: _onSelectItem,
     ),
-    TutorCommunicationScreen(
-      initialSnapshot: buildTutorDemoData(tutorName: _displayName),
+   TutorCommunicationScreen(
+      initialSnapshot: buildTutorDemoData(
+        tutorName: _displayName,
+        studentId: widget.usuarioId, // 🟢 Agregamos el ID aquí
+      ),
       userId: widget.usuarioId,
       tutorName: _displayName,
     ),
     const AyudaScreen(),
   ];
-
   List<String> get _screenTitles => [
     _isTutor ? 'Panel del Tutor' : 'Mi Desempeno',
     'Historial Academico',

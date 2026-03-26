@@ -104,7 +104,7 @@ class _PasarListaScreenState extends State<PasarListaScreen> {
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("✅ Asistencia guardada"), backgroundColor: Colors.green));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Asistencia guardada"), backgroundColor: Color.fromARGB(255, 131, 144, 218)));
       Navigator.pop(context);
     } catch (e) {
       if (mounted) setState(() => _saving = false);

@@ -58,9 +58,8 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
     }
   }
 
-  // ======================================================
-  // 💾 LÓGICA DE FIREBASE (Datos Reales)
-  // ======================================================
+  // LÓGICA DE FIREBASE 
+
   Future<void> _cargarEstadisticasFirebase() async {
     setState(() => _isLoading = true);
     try {
@@ -143,7 +142,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
   void _abrirMensajesPadres() {
     if (_profesorUid.isEmpty) return;
     Navigator.push(context, MaterialPageRoute(
-      builder: (_) => MensajesPadresScreen(profesorId: _profesorUid.hashCode),
+      builder: (_) => MensajesPadresScreen(profesorId: _profesorUid),
     ));
   }
 
@@ -222,7 +221,7 @@ class _PanelDocenteScreenState extends State<PanelDocenteScreen> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text("¡Hola, $_nombreProfesor!", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: darkBlue, height: 1.1)),
             const SizedBox(height: 6),
-            const Text("Bienvenido a tu panel de control", style: TextStyle(color: Color(0xFF64748B), fontSize: 14, fontWeight: FontWeight.w500)),
+            const Text("Tu Aula digital te espera", style: TextStyle(color: Color(0xFF64748B), fontSize: 14, fontWeight: FontWeight.w500)),
           ]),
         ),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [

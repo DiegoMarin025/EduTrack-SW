@@ -35,15 +35,41 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
 
   Future<void> _cargarDatosUsuario() async {
     final prefs = await SharedPreferences.getInstance();
+    String uidGuardado = prefs.getString('saved_uid') ?? "";
+
+    //  MAGIA AUTO-REPARADORA: Si el navegador olvidó el UID, lo buscamos en Firebase usando el correo
+    if (uidGuardado.isEmpty) {
+      String correo = prefs.getString('saved_username') ?? ""; 
+      if (correo.isNotEmpty) {
+        try {
+          final query = await FirebaseFirestore.instance
+              .collection('usuarios')
+              .where('email', isEqualTo: correo)
+              .get();
+          
+          if (query.docs.isNotEmpty) {
+            uidGuardado = query.docs.first.id; // ¡Atrapamos el UID real!
+            await prefs.setString('saved_uid', uidGuardado); // Lo guardamos en Chrome
+          }
+        } catch (e) {
+          debugPrint("Error buscando al maestro: $e");
+        }
+      }
+    }
+
     setState(() {
-      // ✅ Obtenemos el UID de Firebase que guardamos en el login
-      _profesorUid = prefs.getString('saved_uid') ?? "";
+      _profesorUid = uidGuardado;
     });
 
     if (_profesorUid.isNotEmpty) {
       _cargarClasesFirebase();
     } else {
       setState(() => _loading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Cierra sesión y vuelve a entrar para sincronizar tu cuenta.")),
+        );
+      }
     }
   }
 
@@ -150,7 +176,7 @@ class _MisGruposScreenState extends State<MisGruposScreen> {
                   children: [
                     Text("Tu salon y tus materias", style: TextStyle(color: textDark, fontSize: 20, fontWeight: FontWeight.w900)),
                     const SizedBox(height: 6),
-                    Text("Aqui gestionas tu grupo: alumnos, lista del dia y calificaciones.", style: TextStyle(color: textSoft, fontSize: 13.5, fontWeight: FontWeight.w600)),
+                    Text("¡Administra tu lista de alumnos y asistencia!", style: TextStyle(color: textSoft, fontSize: 13.5, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 14),
                     if (bundles.isEmpty) ...[
                       _OnboardingEmpty(primaryBlue: primaryBlue, border: border, textDark: textDark, textSoft: textSoft, onCreate: _abrirDialogoCrear),
@@ -229,7 +255,7 @@ class _TipCard extends StatelessWidget {
       child: Row(children: [
         const Icon(Icons.info_outline_rounded, color: Color(0xFF64748B)),
         const SizedBox(width: 10),
-        Expanded(child: Text("Tip: Si tu escuela usa un solo grupo, créalo una vez y agrega tus materias.", style: TextStyle(color: textSoft, fontWeight: FontWeight.w600, fontSize: 13))),
+        Expanded(child: Text("Tip: Agrega el grupo que se te fué asigando.", style: TextStyle(color: textSoft, fontWeight: FontWeight.w600, fontSize: 13))),
       ]),
     );
   }

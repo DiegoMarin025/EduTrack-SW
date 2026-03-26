@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Importar SharedPreferences
-import '../services/api_service.dart'; // Importar ApiService
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 🟢 Conexión a Firebase
 
 class Solution4Soporte extends StatefulWidget {
   final bool needsContact;
@@ -19,25 +19,15 @@ class _Solution4SoporteState extends State<Solution4Soporte> {
   bool _isSending = false;
   int _usuarioId = 0;
   String _userEmail = '';
-  bool get _canSend =>
-      aceptaInfo && detallesController.text.trim().isNotEmpty && !_isSending;
 
   @override
   void initState() {
     super.initState();
-    detallesController.addListener(_onDetallesChanged);
     _cargarDatosUsuario();
-  }
-
-  void _onDetallesChanged() {
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   @override
   void dispose() {
-    detallesController.removeListener(_onDetallesChanged);
     detallesController.dispose();
     super.dispose();
   }
@@ -47,57 +37,57 @@ class _Solution4SoporteState extends State<Solution4Soporte> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _usuarioId = prefs.getInt('saved_id') ?? 0;
-      _userEmail =
-          prefs.getString('saved_username') ?? 'usuario_anonimo@colegio.com';
+      _userEmail = prefs.getString('saved_username') ?? 'usuario_anonimo@colegio.com';
     });
   }
 
-  // Función para enviar el reporte al backend
+  // ☁️ FUNCIÓN REAL HACIA FIREBASE
   Future<void> _enviarReporte() async {
-    setState(() {
-      _isSending = true;
-    });
+    // 🟢 VALIDACIONES AÑADIDAS
+    if (!aceptaInfo) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(' Debes aceptar que soporte revise tu historial.'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+    if (detallesController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(' Por favor, describe qué materia o período no aparece.'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    setState(() => _isSending = true);
 
     try {
-      // Especificamos el tipo de error
-      final mensajeFinal =
-          "TIPO: Error Calificaciones (No cargan).\nDETALLES: ${detallesController.text}";
-
-      await ApiService.enviarReporteSoporte(
-        _usuarioId,
-        _userEmail,
-        mensajeFinal,
-      );
+      await FirebaseFirestore.instance.collection('tickets_soporte').add({
+        'usuarioId': _usuarioId,
+        'email': _userEmail,
+        // 👇 ETIQUETA PARA IDENTIFICAR ESTE ERROR ESPECÍFICO 👇
+        'categoriaProblema': 'No cargan calificaciones', 
+        'descripcion': detallesController.text.trim(),
+        'status': 'Abierto',
+        'fechaRegistro': FieldValue.serverTimestamp(),
+      });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              '¡Reporte enviado! Revisaremos tu historial académico.',
-            ),
+            content: Text('¡Reporte enviado! Revisaremos tu historial académico.'),
             backgroundColor: Colors.green,
           ),
         );
         detallesController.clear();
-        setState(() {
-          aceptaInfo = false;
-        });
+        setState(() => aceptaInfo = false);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al enviar: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(' Error al enviar: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSending = false;
-        });
-      }
+      if (mounted) setState(() => _isSending = false);
     }
   }
 
@@ -241,7 +231,8 @@ class _Solution4SoporteState extends State<Solution4Soporte> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: _canSend ? _enviarReporte : null,
+                          // 🟢 MAGIA AQUÍ: El botón siempre llama a la función
+                          onPressed: _isSending ? null : _enviarReporte,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.deepPurple,
                             foregroundColor: Colors.white,
@@ -309,31 +300,6 @@ class _Solution4SoporteState extends State<Solution4Soporte> {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 1)),
-    );
-  }
-
-  // Mantenemos tu método original por si acaso, aunque usamos Cards arriba
-  void _showContactDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Contacto Académico'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text('Correo: escolares@colegio.com'),
-            SizedBox(height: 8),
-            Text('Teléfono: +52 55 1234 5678 ext 102'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
     );
   }
 }

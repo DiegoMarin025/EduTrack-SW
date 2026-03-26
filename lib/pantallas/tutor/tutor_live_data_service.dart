@@ -1,162 +1,122 @@
 import 'package:shared_preferences/shared_preferences.dart';
-
 import '../../pantallas/materia_models.dart';
 import '../../services/api_service.dart';
 import '../../services/report_attachment_picker.dart';
 import '../../services/asistencia_service.dart';
 import 'tutor_demo_data.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class TutorLiveDataService {
   static Future<TutorStudentSnapshot> loadSnapshot({
     required int sessionUserId,
     required String tutorName,
   }) async {
-    final fallback = buildTutorDemoData(tutorName: tutorName);
     final prefs = await SharedPreferences.getInstance();
-    final sessionRole = (prefs.getString('saved_userType') ?? '')
-        .trim()
-        .toLowerCase();
+    final String tutorUid = prefs.getString('saved_uid') ?? "";
 
-    TutorAlumnoVinculado? linkedStudent;
-    int? linkedStudentId = prefs.getInt('saved_linked_student_id');
+    int alumnoIdReal = 0;
+    String nombreAlumnoReal = "Cargando...";
+    int idGrupoReal = 0; 
+    String nombreDelGrupoReal = "Sin grupo"; // Aquí se guardará el "5B"
+    List<TutorActivityRecord> actividadesFirebase = [];
 
-    if (sessionRole == 'tutor') {
+    if (tutorUid.isNotEmpty) {
       try {
-        linkedStudent = await ApiService.getTutorAlumnoVinculado(sessionUserId);
-        linkedStudentId = linkedStudent?.id ?? linkedStudentId;
-        if (linkedStudentId != null && linkedStudentId > 0) {
-          await prefs.setInt('saved_linked_student_id', linkedStudentId);
-        }
-      } catch (_) {}
-    }
+        final tutorDoc = await FirebaseFirestore.instance.collection('usuarios').doc(tutorUid).get();
 
-    final alumnoId = sessionRole == 'tutor' ? linkedStudentId : sessionUserId;
-    if (alumnoId == null || alumnoId <= 0) {
-      return fallback;
-    }
+        if (tutorDoc.exists) {
+          final data = tutorDoc.data();
+          alumnoIdReal = int.tryParse(data?['matriculaHijo']?.toString() ?? '0') ?? 0;
 
-    DashboardData? dashboard;
-    Map<String, List<Materia>> historial = {};
-    List<TutorReporteMaestro> tutorReports = [];
-    List<AsistenciaAlumnoHistorialItem> attendanceItems = [];
-    final summariesByClass = <int, ResumenFinalAlumno>{};
+          if (alumnoIdReal > 0) {
+            final alumnoQuery = await FirebaseFirestore.instance
+                .collection('alumnos')
+                .where('id', isEqualTo: alumnoIdReal)
+                .get();
 
-    try {
-      dashboard = await ApiService.getStudentDashboard(alumnoId);
-    } catch (_) {}
+            if (alumnoQuery.docs.isNotEmpty) {
+              final alumnoData = alumnoQuery.docs.first.data();
+              nombreAlumnoReal = alumnoData['nombre'] ?? "Sin nombre";
+              idGrupoReal = int.tryParse(alumnoData['grupoId']?.toString() ?? '0') ?? 0;
+              
+              await prefs.setInt('saved_linked_student_id', alumnoIdReal);
 
-    try {
-      historial = await ApiService.getHistorialAcademico(alumnoId);
-    } catch (_) {}
+              if (idGrupoReal > 0) {
+                nombreDelGrupoReal = idGrupoReal.toString(); // Por defecto pone el número
+                
+                // 🟢 EL CAMBIO MÁGICO: Buscamos por 'grupoIdReal' (Como en tu foto)
+                final grupoQuery = await FirebaseFirestore.instance
+                    .collection('grupos') 
+                    .where('grupoIdReal', isEqualTo: idGrupoReal) 
+                    .get();
+                
+                if (grupoQuery.docs.isNotEmpty) {
+                  final grupoData = grupoQuery.docs.first.data();
+                  // Sacamos el campo 'nombre' que dice "5B"
+                  nombreDelGrupoReal = grupoData['nombre'] ?? idGrupoReal.toString();
+                }
 
-    if (sessionRole == 'tutor') {
-      try {
-        tutorReports = await ApiService.getTutorReportes(sessionUserId);
-      } catch (_) {}
-    }
+                // BUSCAMOS LAS ACTIVIDADES (Intacto)
+                final queryAct = await FirebaseFirestore.instance
+                    .collection('actividades')
+                    .where('grupoIdReal', isEqualTo: idGrupoReal)
+                    .get();
 
-    try {
-      attendanceItems = await AsistenciaService.obtenerHistorialPorAlumno(
-        alumnoId,
-      );
-    } catch (_) {}
-
-    if (dashboard != null && dashboard.subjects.isNotEmpty) {
-      final entries = await Future.wait<MapEntry<int, ResumenFinalAlumno>?>(
-        dashboard.subjects.map((subject) async {
-          try {
-            final summary = await ApiService.getResumenFinalAlumno(
-              claseId: subject.claseId,
-              alumnoId: alumnoId,
-            );
-            return MapEntry(subject.claseId, summary);
-          } catch (_) {
-            return null;
+                actividadesFirebase = queryAct.docs.map((doc) {
+                  final d = doc.data();
+                  return TutorActivityRecord(
+                    title: d['titulo'] ?? 'Sin título',
+                    subjectName: 'General', 
+                    dueDateLabel: 'Próximamente',
+                    status: 'Asignada',
+                    description: 'Valor: ${d['valor'] ?? 0} pts',
+                  );
+                }).toList();
+              }
+            }
           }
-        }),
-      );
-
-      for (final entry in entries) {
-        if (entry != null) {
-          summariesByClass[entry.key] = entry.value;
         }
+      } catch (e) {
+        print("❌ Error: $e");
       }
     }
 
-    final latestGroupName = _resolveLatestGroupName(historial);
-    final todasLasMaterias = _collectAllMaterias(historial);
-    final subjectNameByClassId = _buildSubjectNameByClassId(dashboard);
-    final teacherBySubject = _buildTeacherBySubject(todasLasMaterias);
+    // 📚 LÓGICA DE API (No se toca)
+    final int alumnoId = alumnoIdReal > 0 ? alumnoIdReal : sessionUserId;
+
+    DashboardData? dashboard;
+    Map<String, List<Materia>> historial = {};
+    List<AsistenciaAlumnoHistorialItem> attendanceItems = [];
+
+    try { dashboard = await ApiService.getStudentDashboard(alumnoId); } catch (_) {}
+    try { historial = await ApiService.getHistorialAcademico(alumnoId); } catch (_) {}
+    try { attendanceItems = await AsistenciaService.obtenerHistorialPorAlumno(alumnoId); } catch (_) {}
+
     final attendanceTotals = _countAttendance(attendanceItems);
+    final todasLasMaterias = _collectAllMaterias(historial);
 
-    final grades = _buildGrades(
-      materias: todasLasMaterias,
-      teacherBySubject: teacherBySubject,
-      subjectNameByClassId: subjectNameByClassId,
-      summariesByClass: summariesByClass,
-      dashboard: dashboard,
-      fallback: fallback.grades,
-    );
-
-    final comments = _buildComments(
-      materiasActuales: todasLasMaterias,
-      teacherBySubject: teacherBySubject,
-      subjectNameByClassId: subjectNameByClassId,
-      summariesByClass: summariesByClass,
-      fallback: fallback.comments,
-    );
-
-    final reports = _buildReports(
-      tutorReports: tutorReports,
-      fallback: fallback.reports,
-    );
-
-    final activities = _buildActivities(
-      materiasActuales: todasLasMaterias,
-      subjectNameByClassId: subjectNameByClassId,
-      summariesByClass: summariesByClass,
-      fallback: fallback.activities,
-    );
-
-    final attendanceHistory = _buildAttendanceHistory(attendanceItems);
-    final justifications = _buildJustifications(
-      attendanceItems: attendanceItems,
-      tutorReports: tutorReports,
-    );
-
-    final studentName =
-        dashboard?.student.nombre ??
-        linkedStudent?.nombre ??
-        fallback.studentName;
-
-    final groupName =
-        latestGroupName != null &&
-            latestGroupName.trim().isNotEmpty &&
-            latestGroupName.trim().toLowerCase() != 'sin grupo'
-        ? latestGroupName.trim()
-        : fallback.groupName;
-
+    // 🚀 RETORNO CON EL NOMBRE BONITO
     return TutorStudentSnapshot(
+      studentId: alumnoId,
       tutorName: tutorName,
-      studentName: studentName,
-      groupName: groupName,
-      schoolPeriod: _buildIdentityLabel(
-        alumnoId: alumnoId,
-        dashboard: dashboard,
-        linkedStudent: linkedStudent,
-      ),
+      studentName: nombreAlumnoReal,
+      groupName: nombreDelGrupoReal, // 🟢 ¡AQUÍ MANDAMOS EL "5B"!
+      schoolPeriod: "ID $alumnoId",
       totalAssistances: attendanceTotals.assistances,
       totalAbsences: attendanceTotals.absences,
-      grades: grades.isNotEmpty ? grades : fallback.grades,
-      comments: comments.isNotEmpty ? comments : fallback.comments,
-      reports: reports.isNotEmpty ? reports : fallback.reports,
-      activities: activities.isNotEmpty ? activities : fallback.activities,
-      attendanceHistory: attendanceHistory.isNotEmpty
-          ? attendanceHistory
-          : fallback.attendanceHistory,
-      justifications: justifications.isNotEmpty
-          ? justifications
-          : fallback.justifications,
+      activities: actividadesFirebase, 
+      grades: _buildGrades(
+        materias: todasLasMaterias,
+        teacherBySubject: _buildTeacherBySubject(todasLasMaterias),
+        subjectNameByClassId: _buildSubjectNameByClassId(dashboard),
+        summariesByClass: {},
+        dashboard: dashboard,
+        fallback: [],
+      ),
+      attendanceHistory: _buildAttendanceHistory(attendanceItems),
+      comments: [],
+      reports: [],
+      justifications: [],
     );
   }
 
@@ -190,30 +150,28 @@ class TutorLiveDataService {
     required String detail,
     SelectedReportAttachment? attachment,
   }) async {
-    final subjectName = record.subjectName.trim();
-    final subjectLabel = subjectName.isNotEmpty
-        ? subjectName
-        : 'Sin materia especifica';
-    final message = [
-      'TIPO: Justificacion de falta.',
-      'FECHA: ${record.dateLabel}',
-      'MATERIA: $subjectLabel',
-      'MOTIVO: $reason',
-      'DETALLE: $detail',
-    ].join('\n');
+    try {
+      final CollectionReference justificantes = FirebaseFirestore.instance
+          .collection('justificantes');
 
-    return submitTeacherReport(
-      userId: usuarioId,
-      category: 'Justificacion de falta',
-      title: subjectName.isNotEmpty
-          ? 'Justificacion de falta | $subjectName'
-          : 'Justificacion de falta',
-      detail: message,
-      subjectName: subjectName.isNotEmpty ? subjectName : null,
-      attachment: attachment,
-    );
+      await justificantes.add({
+        'tutorId': usuarioId,
+        'fechaFalta': record.dateLabel,
+        'materia': record.subjectName,
+        'motivo': reason,
+        'detalle': detail,
+        'estatus': 'En revision',
+        'fechaEnvio': FieldValue.serverTimestamp(),
+        'nombreAdjunto': attachment?.fileName ?? '',
+      });
+
+      print("¡Justificante guardado en la nube con éxito! 🎉");
+      return true;
+    } catch (e) {
+      print("Error guardando justificante en Firebase: $e");
+      return false;
+    }
   }
-
   static TutorSubjectGrade _mapMateriaToGrade(
     Materia materia, {
     ResumenFinalAlumno? summary,

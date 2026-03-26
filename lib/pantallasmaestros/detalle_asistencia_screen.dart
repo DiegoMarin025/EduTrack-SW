@@ -86,7 +86,7 @@ class _DetalleAsistenciaScreenState extends State<DetalleAsistenciaScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${format.label} listo: ${result.location}'),
-          backgroundColor: Colors.green,
+          backgroundColor: const Color.fromARGB(255, 115, 145, 216),
         ),
       );
     } catch (e) {

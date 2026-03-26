@@ -128,7 +128,7 @@ class _PlaneacionScreenState extends State<PlaneacionScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('¡Planeación guardada! ✅'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('¡Planeación guardada! '), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
@@ -149,7 +149,7 @@ class _PlaneacionScreenState extends State<PlaneacionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 🟢 El botón se activa si hay tema y materia seleccionada
+    // El botón se activa si hay tema y materia seleccionada
     bool canSave = _temaController.text.isNotEmpty && _selectedClaseId != null && !_saving;
 
     return Scaffold(
@@ -247,7 +247,7 @@ class _PlaneacionScreenState extends State<PlaneacionScreen> {
         children: [
           Text('PLANEACIÓN ACADÉMICA', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
           SizedBox(height: 8),
-          Text('Captura cada clase con estructura clara.', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
+          Text('¡Planea tus clases con facilidad y confianza!', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
         ],
       ),
     );

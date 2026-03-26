@@ -2,6 +2,7 @@ class TutorStudentSnapshot {
   // Snapshot comun para TODAS las pantallas de tutor.
   // La idea es que futuras integraciones llenen esta estructura desde backend/Firebase
   // y no desde widgets individuales.
+  final int studentId;
   final String tutorName;
   final String studentName;
   final String groupName;
@@ -16,6 +17,7 @@ class TutorStudentSnapshot {
   final List<TutorJustificationRecord> justifications;
 
   const TutorStudentSnapshot({
+    required this.studentId,
     required this.tutorName,
     required this.studentName,
     required this.groupName,
@@ -229,15 +231,13 @@ class TutorJustificationRecord {
   }
 }
 
-TutorStudentSnapshot buildTutorDemoData({required String tutorName}) {
-  // Dataset de respaldo solo para la experiencia tutor.
-  // Mantenerlo mientras la migracion no cubra asistencia, actividades,
-  // comentarios y justificaciones reales.
+TutorStudentSnapshot buildTutorDemoData({required String tutorName, int studentId = 0}) {
   return TutorStudentSnapshot(
+    studentId: studentId,
     tutorName: tutorName,
-    studentName: "Alumno pendiente de vincular",
+    studentName: "Cargando...",
     groupName: "Pendiente",
-    schoolPeriod: "Sin informacion academica",
+    schoolPeriod: "2025-2026",
     totalAssistances: 0,
     totalAbsences: 0,
     grades: const [],

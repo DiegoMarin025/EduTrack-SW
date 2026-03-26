@@ -44,7 +44,7 @@ class TutorActivitiesScreen extends StatelessWidget {
                     icon: Icons.assignment_rounded,
                     title: "Actividades de ${snapshot.studentName}",
                     subtitle:
-                        "Revisa las actividades asignadas, su materia y la fecha de entrega.",
+                        "Revisa las actividades asignadas, su materia y la entrega.",
                     trailing: TutorStatusBadge(
                       text: "${snapshot.pendingActivitiesCount} pendientes",
                       color: TutorPalette.warning,
@@ -99,7 +99,7 @@ class TutorActivitiesScreen extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         const Text(
-          "Total de actividades asignadas para el periodo actual con control de estatus.",
+          "Total de actividades asignadas para el periodo actual.",
           style: TextStyle(
             color: Colors.white70,
             fontSize: 13,
@@ -220,7 +220,7 @@ class TutorActivitiesScreen extends StatelessWidget {
         icon: Icons.assignment_rounded,
         title: "Aqui apareceran las actividades",
         message:
-            "Esta seccion mostrara tareas, entregas y fechas limite cuando el backend tenga actividades reales.",
+            "",
       );
     }
 

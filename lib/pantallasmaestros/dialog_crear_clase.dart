@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // <--- MAGIA DE FIREBASE
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 
@@ -46,9 +46,9 @@ class _DialogCrearClaseState extends State<DialogCrearClase> {
   bool get _usaGrupoExistente =>
       _modoGrupo == _ModoGrupo.existente && _gruposDisponibles.isNotEmpty;
 
-  // ======================================================
-  // 💾 BUSCAMOS LOS GRUPOS EN FIREBASE (No más ApiService)
-  // ======================================================
+  
+  //  Busca los grupos en Firestore
+
   Future<void> _cargarCatalogoFirebase() async {
     try {
       final snapshot = await FirebaseFirestore.instance
@@ -98,9 +98,8 @@ class _DialogCrearClaseState extends State<DialogCrearClase> {
     );
   }
 
-  // ======================================================
-  // 💾 GUARDAMOS EL GRUPO EN FIREBASE (No más ApiService)
-  // ======================================================
+  
+  // Guarda el grupo en Firebase
   Future<void> _crear() async {
     final materia = _materiaController.text.trim();
     final nombreGrupo = _grupoController.text.trim();
@@ -131,7 +130,7 @@ class _DialogCrearClaseState extends State<DialogCrearClase> {
           ? _gruposDisponibles.firstWhere((g) => g.id == _selectedGrupoId).nombre
           : nombreGrupo;
 
-      // MAGIA: Esto crea la colección 'grupos' automáticamente en la consola
+      // Esto crea la colección 'grupos' automáticamente en la consola
       await FirebaseFirestore.instance.collection('grupos').add({
         'nombre': nombreFinal,
         'materia': materia,

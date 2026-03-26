@@ -308,7 +308,7 @@ class _SubirCalificacionesScreenState extends State<SubirCalificacionesScreen> {
               icon: const Icon(Icons.save, size: 20),
               label: const Text("Guardar"),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: const Color.fromARGB(255, 55, 64, 186),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),

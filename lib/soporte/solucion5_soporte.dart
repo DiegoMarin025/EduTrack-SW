@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Importar SharedPreferences
-import '../services/api_service.dart'; // Importar ApiService
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 🟢 Conexión a Firebase
 
 class Solution5Soporte extends StatefulWidget {
   final bool needsContact;
@@ -19,85 +19,74 @@ class _Solution5SoporteState extends State<Solution5Soporte> {
   bool _isSending = false;
   int _usuarioId = 0;
   String _userEmail = '';
-  bool get _canSend =>
-      aceptaInfo && detallesController.text.trim().isNotEmpty && !_isSending;
 
   @override
   void initState() {
     super.initState();
-    detallesController.addListener(_onDetallesChanged);
     _cargarDatosUsuario();
-  }
-
-  void _onDetallesChanged() {
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   @override
   void dispose() {
-    detallesController.removeListener(_onDetallesChanged);
     detallesController.dispose();
     super.dispose();
   }
 
-  // Cargar datos del usuario para el reporte
   Future<void> _cargarDatosUsuario() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _usuarioId = prefs.getInt('saved_id') ?? 0;
-      _userEmail =
-          prefs.getString('saved_username') ?? 'usuario_anonimo@colegio.com';
+      _userEmail = prefs.getString('saved_username') ?? 'usuario_anonimo@colegio.com';
     });
   }
 
-  // Función para enviar el reporte al backend
+  // ☁️ FUNCIÓN REAL HACIA FIREBASE
   Future<void> _enviarReporte() async {
-    setState(() {
-      _isSending = true;
-    });
+    // 🟢 VALIDACIONES AÑADIDAS
+    if (!aceptaInfo) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(' Debes aceptar compartir los detalles del archivo para el diagnóstico.'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+    if (detallesController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(' Por favor, describe el error o el nombre del archivo en la caja de texto.'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    setState(() => _isSending = true);
 
     try {
-      // Especificamos el tipo de error
-      final mensajeFinal =
-          "TIPO: Error Subida de Archivos.\nDETALLES: ${detallesController.text}";
-
-      await ApiService.enviarReporteSoporte(
-        _usuarioId,
-        _userEmail,
-        mensajeFinal,
-      );
+      await FirebaseFirestore.instance.collection('tickets_soporte').add({
+        'usuarioId': _usuarioId,
+        'email': _userEmail,
+        // 👇 ETIQUETA PARA IDENTIFICAR ESTE ERROR ESPECÍFICO 👇
+        'categoriaProblema': 'Error al subir archivos', 
+        'descripcion': detallesController.text.trim(),
+        'status': 'Abierto',
+        'fechaRegistro': FieldValue.serverTimestamp(),
+      });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              '¡Reporte enviado! Revisaremos el servidor de archivos.',
-            ),
+            content: Text(' ¡Reporte enviado! Revisaremos el servidor de archivos.'),
             backgroundColor: Colors.green,
           ),
         );
         detallesController.clear();
-        setState(() {
-          aceptaInfo = false;
-        });
+        setState(() => aceptaInfo = false);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al enviar: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error al enviar: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSending = false;
-        });
-      }
+      if (mounted) setState(() => _isSending = false);
     }
   }
 
@@ -125,12 +114,9 @@ class _Solution5SoporteState extends State<Solution5Soporte> {
             ),
             const SizedBox(height: 12),
 
-            // Botón Volver a Inicio
             const SizedBox(height: 20),
             const Text('1. Verifica el tamaño del archivo (máximo 10MB)'),
-            const Text(
-              '2. Asegúrate de que el formato sea compatible (PDF, DOC, JPG, PNG)',
-            ),
+            const Text('2. Asegúrate de que el formato sea compatible (PDF, DOC, JPG, PNG)'),
             const Text('3. Comprueba tu conexión a internet'),
             const Text('4. Intenta con un nombre de archivo más corto'),
             const Text('5. Reinicia la aplicación y vuelve a intentarlo'),
@@ -180,15 +166,10 @@ class _Solution5SoporteState extends State<Solution5Soporte> {
                 children: [
                   const Text(
                     'PASO 1: Diagnóstico',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.deepPurple,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Para ayudarte, necesitamos saber qué archivo está fallando.',
-                  ),
+                  const Text('Para ayudarte, necesitamos saber qué archivo está fallando.'),
                   const SizedBox(height: 8),
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
@@ -198,8 +179,7 @@ class _Solution5SoporteState extends State<Solution5Soporte> {
                       style: TextStyle(fontSize: 13),
                     ),
                     value: aceptaInfo,
-                    onChanged: (val) =>
-                        setState(() => aceptaInfo = val ?? false),
+                    onChanged: (val) => setState(() => aceptaInfo = val ?? false),
                   ),
 
                   const SizedBox(height: 16),
@@ -208,10 +188,7 @@ class _Solution5SoporteState extends State<Solution5Soporte> {
 
                   const Text(
                     'PASO 2: Detalles',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.deepPurple,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple),
                   ),
                   const SizedBox(height: 8),
                   const Text('Describe el error o nombre del archivo:'),
@@ -220,8 +197,7 @@ class _Solution5SoporteState extends State<Solution5Soporte> {
                     controller: detallesController,
                     maxLines: 4,
                     decoration: const InputDecoration(
-                      hintText:
-                          'Ej: Al subir la tarea de historia "Ensayo.pdf" se queda cargando...',
+                      hintText: 'Ej: No me deja subir justificaciones...',
                       border: OutlineInputBorder(),
                       filled: true,
                       fillColor: Colors.white,
@@ -246,7 +222,8 @@ class _Solution5SoporteState extends State<Solution5Soporte> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: _canSend ? _enviarReporte : null,
+                          // 🟢 EL BOTÓN SIEMPRE SE PUEDE PRESIONAR AHORA
+                          onPressed: _isSending ? null : _enviarReporte,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.deepPurple,
                             foregroundColor: Colors.white,
@@ -254,14 +231,7 @@ class _Solution5SoporteState extends State<Solution5Soporte> {
                             elevation: 2,
                           ),
                           child: _isSending
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
+                              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                               : const Text('ENVIAR'),
                         ),
                       ),
@@ -276,28 +246,19 @@ class _Solution5SoporteState extends State<Solution5Soporte> {
             if (widget.needsContact) ...[
               const Divider(),
               const SizedBox(height: 10),
-              const Text(
-                'Soporte Técnico:',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+              const Text('Soporte Técnico:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               Card(
                 elevation: 1,
                 child: Column(
                   children: [
                     ListTile(
-                      leading: const Icon(
-                        Icons.email_outlined,
-                        color: Colors.deepPurple,
-                      ),
+                      leading: const Icon(Icons.email_outlined, color: Colors.deepPurple),
                       title: const Text('soporte@colegio.com'),
                       subtitle: const Text('Reportar problemas de plataforma'),
                       trailing: IconButton(
                         icon: const Icon(Icons.copy),
-                        onPressed: () => _copyToClipboard(
-                          'soporte@colegio.com',
-                          'Correo copiado',
-                        ),
+                        onPressed: () => _copyToClipboard('soporte@colegio.com', 'Correo copiado'),
                       ),
                     ),
                   ],
@@ -317,7 +278,6 @@ class _Solution5SoporteState extends State<Solution5Soporte> {
     );
   }
 
-  // Mantenemos tu método original por compatibilidad
   void _showContactDialog(BuildContext context) {
     showDialog<void>(
       context: context,

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Importar SharedPreferences
-import '../services/api_service.dart'; // Importar ApiService
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 🟢 Conexión a Firebase
 
 class Solution2Soporte extends StatefulWidget {
   final bool needsContact;
@@ -19,55 +19,54 @@ class _Solution2SoporteState extends State<Solution2Soporte> {
   bool _isSending = false;
   int _usuarioId = 0;
   String _userEmail = '';
-  bool get _canSend =>
-      aceptaInfo && detallesController.text.trim().isNotEmpty && !_isSending;
 
   @override
   void initState() {
     super.initState();
-    detallesController.addListener(_onDetallesChanged);
     _cargarDatosUsuario();
-  }
-
-  void _onDetallesChanged() {
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   @override
   void dispose() {
-    detallesController.removeListener(_onDetallesChanged);
     detallesController.dispose();
     super.dispose();
   }
 
-  // Cargar datos del usuario para el reporte
   Future<void> _cargarDatosUsuario() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _usuarioId = prefs.getInt('saved_id') ?? 0;
-      _userEmail =
-          prefs.getString('saved_username') ?? 'usuario_anonimo@colegio.com';
+      _userEmail = prefs.getString('saved_username') ?? 'usuario_anonimo@colegio.com';
     });
   }
 
-  // Función para enviar el reporte al backend
+  // ☁️ FUNCIÓN REAL HACIA FIREBASE
   Future<void> _enviarReporte() async {
-    setState(() {
-      _isSending = true;
-    });
+    // 🟢 VALIDACIONES AÑADIDAS
+    if (!aceptaInfo) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(' Debes marcar la casilla de autorización.'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+    if (detallesController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(' Por favor, describe el problema en la caja de texto.'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    setState(() => _isSending = true);
 
     try {
-      // Especificamos que es un problema de conexión
-      final mensajeFinal =
-          "TIPO: Error de Conexión.\nDETALLES: ${detallesController.text}";
-
-      await ApiService.enviarReporteSoporte(
-        _usuarioId,
-        _userEmail,
-        mensajeFinal,
-      );
+      await FirebaseFirestore.instance.collection('tickets_soporte').add({
+        'usuarioId': _usuarioId,
+        'email': _userEmail,
+        'categoriaProblema': 'Error de conexión', 
+        'descripcion': detallesController.text.trim(),
+        'status': 'Abierto',
+        'fechaRegistro': FieldValue.serverTimestamp(),
+      });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -77,25 +76,16 @@ class _Solution2SoporteState extends State<Solution2Soporte> {
           ),
         );
         detallesController.clear();
-        setState(() {
-          aceptaInfo = false;
-        });
+        setState(() => aceptaInfo = false);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al enviar: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error al enviar: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSending = false;
-        });
-      }
+      if (mounted) setState(() => _isSending = false);
     }
   }
 
@@ -144,15 +134,10 @@ class _Solution2SoporteState extends State<Solution2Soporte> {
                 children: [
                   const Text(
                     'PASO 1: Diagnóstico',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.deepPurple,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Permite que soporte técnico analice tus logs de conexión.',
-                  ),
+                  const Text('Permite que soporte técnico analice tus logs de conexión.'),
                   const SizedBox(height: 8),
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
@@ -162,8 +147,7 @@ class _Solution2SoporteState extends State<Solution2Soporte> {
                       style: TextStyle(fontSize: 13),
                     ),
                     value: aceptaInfo,
-                    onChanged: (val) =>
-                        setState(() => aceptaInfo = val ?? false),
+                    onChanged: (val) => setState(() => aceptaInfo = val ?? false),
                   ),
 
                   const SizedBox(height: 16),
@@ -172,10 +156,7 @@ class _Solution2SoporteState extends State<Solution2Soporte> {
 
                   const Text(
                     'PASO 2: Detalles',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.deepPurple,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple),
                   ),
                   const SizedBox(height: 8),
                   const Text('Describe cuándo ocurre el error:'),
@@ -184,8 +165,7 @@ class _Solution2SoporteState extends State<Solution2Soporte> {
                     controller: detallesController,
                     maxLines: 4,
                     decoration: const InputDecoration(
-                      hintText:
-                          'Ej: Se desconecta al entrar a calificaciones...',
+                      hintText: 'Ej: Se desconecta al entrar a calificaciones...',
                       border: OutlineInputBorder(),
                       filled: true,
                       fillColor: Colors.white,
@@ -210,7 +190,8 @@ class _Solution2SoporteState extends State<Solution2Soporte> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: _canSend ? _enviarReporte : null,
+                          // 🟢 MAGIA AQUÍ TAMBIÉN
+                          onPressed: _isSending ? null : _enviarReporte,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.deepPurple,
                             foregroundColor: Colors.white,
@@ -218,14 +199,7 @@ class _Solution2SoporteState extends State<Solution2Soporte> {
                             elevation: 2,
                           ),
                           child: _isSending
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
+                              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                               : const Text('ENVIAR'),
                         ),
                       ),
@@ -250,18 +224,12 @@ class _Solution2SoporteState extends State<Solution2Soporte> {
                 child: Column(
                   children: [
                     ListTile(
-                      leading: const Icon(
-                        Icons.email_outlined,
-                        color: Colors.deepPurple,
-                      ),
+                      leading: const Icon(Icons.email_outlined, color: Colors.deepPurple),
                       title: const Text('redes@colegio.com'),
                       subtitle: const Text('Reportar fallas de red'),
                       trailing: IconButton(
                         icon: const Icon(Icons.copy),
-                        onPressed: () => _copyToClipboard(
-                          'redes@colegio.com',
-                          'Correo copiado',
-                        ),
+                        onPressed: () => _copyToClipboard('redes@colegio.com', 'Correo copiado'),
                       ),
                     ),
                   ],

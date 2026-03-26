@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // <--- Importante
-import 'package:cloud_firestore/cloud_firestore.dart'; // <--- Importante
+import 'package:firebase_auth/firebase_auth.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 
 import 'main_layout.dart';
 import 'pantallasmaestros/main_layout_maestros_screen.dart';
@@ -54,7 +54,7 @@ class _LoginPageState extends State<LoginPage>
   }
 
   // ======================================================
-  // 🔐 LÓGICA DE LOGIN CON FIREBASE (Sustituye a ApiService)
+  // 🔐 LÓGICA DE LOGIN CON FIREBASE (Segura y limpia)
   // ======================================================
   void login() async {
     if (emailController.text.isEmpty || passwordController.text.isEmpty) {
@@ -90,20 +90,22 @@ class _LoginPageState extends State<LoginPage>
       final String rolReal = (userData['rol'] ?? 'tutor').toString().toLowerCase();
       final String nombreFull = userData['nombre'] ?? 'Usuario';
 
-      // 3. Guardar en SharedPreferences para que la App no se rompa
+      // 3. Guardar en SharedPreferences 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('saved_username', emailController.text.trim());
       await prefs.setString('saved_name', nombreFull);
       await prefs.setString('saved_userType', rolReal);
       await prefs.setString('saved_uid', uid);
       
-      // Mantenemos saved_id como un int (usando el hash del uid) para compatibilidad
       int userIdInt = uid.hashCode;
       await prefs.setInt('saved_id', userIdInt);
 
-      // Manejo de matrícula vinculada (si es tutor)
-      if (userData.containsKey('matriculaHijo')) {
-        await prefs.setString('saved_linked_student_id', userData['matriculaHijo'].toString());
+      // 🟢 CORRECCIÓN VITAL: Guardar como int, no como String
+      if (userData.containsKey('matriculaHijo') && userData['matriculaHijo'] != null) {
+        int matriculaGuardada = int.tryParse(userData['matriculaHijo'].toString()) ?? 0;
+        if (matriculaGuardada > 0) {
+          await prefs.setInt('saved_linked_student_id', matriculaGuardada);
+        }
       }
 
       if (mounted) {
@@ -111,8 +113,10 @@ class _LoginPageState extends State<LoginPage>
       }
     } on FirebaseAuthException catch (e) {
       String mensaje = "Error al ingresar";
-      if (e.code == 'user-not-found') mensaje = "El correo no está registrado";
+      // 🟢 MANEJO DE ERRORES MODERNOS DE FIREBASE
+      if (e.code == 'user-not-found' || e.code == 'invalid-email') mensaje = "El correo no está registrado";
       else if (e.code == 'wrong-password') mensaje = "Contraseña incorrecta";
+      else if (e.code == 'invalid-credential') mensaje = "Correo o contraseña incorrectos";
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

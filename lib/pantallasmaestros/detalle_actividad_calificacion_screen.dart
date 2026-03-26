@@ -61,7 +61,7 @@ class _DetalleActividadCalificacionScreenState
   }
 
   // ======================================================
-  // 💾 LÓGICA FIREBASE (LEER)
+  // LÓGICA FIREBASE (LEER)
   // ======================================================
   Future<void> _cargarDatosDesdeFirebase() async {
     setState(() => _loading = true);
@@ -178,7 +178,7 @@ class _DetalleActividadCalificacionScreenState
   }
 
   // ======================================================
-  // 💾 LÓGICA FIREBASE (GUARDAR)
+  //  LÓGICA FIREBASE (GUARDAR)
   // ======================================================
   Future<void> _guardarCapturasFirebase() async {
     setState(() => _saving = true);
@@ -228,7 +228,7 @@ class _DetalleActividadCalificacionScreenState
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('¡Calificaciones guardadas en la nube! ☁️✅'), backgroundColor: Colors.green),
+        const SnackBar(content: Text('¡Calificaciones guardadas en la nube! '), backgroundColor: Color.fromARGB(255, 47, 73, 189)),
       );
       Navigator.pop(context, true);
 
